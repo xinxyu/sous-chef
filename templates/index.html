@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sous Chef - Recipe Scraper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .input-group input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            display: none;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .recipe {
+            display: none;
+        }
+        
+        .recipe-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .recipe-header h2 {
+            color: #333;
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+        
+        .recipe-image {
+            max-width: 100%;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .recipe-meta {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        
+        .meta-item {
+            text-align: center;
+        }
+        
+        .meta-label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .meta-value {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #333;
+            margin-top: 5px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section h3 {
+            color: #667eea;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .ingredients-list {
+            list-style: none;
+        }
+        
+        .ingredients-list li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+        
+        .instructions-list {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+        
+        .instructions-list li {
+            counter-increment: step-counter;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            position: relative;
+            padding-left: 50px;
+        }
+        
+        .instructions-list li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 15px;
+            top: 15px;
+            background: #667eea;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🍳 Sous Chef</h1>
+            <p>Scrape recipes from any website</p>
+        </div>
+        
+        <div class="card">
+            <div class="input-group">
+                <input type="url" id="recipeUrl" placeholder="Enter recipe URL (e.g., https://www.allrecipes.com/recipe/...)" />
+                <button class="btn" onclick="scrapeRecipe()">Scrape Recipe</button>
+            </div>
+            
+            <div class="error" id="error"></div>
+            <div class="loading" id="loading">Scraping recipe... Please wait.</div>
+        </div>
+        
+        <div class="card recipe" id="recipe">
+            <div class="recipe-header">
+                <h2 id="recipeTitle"></h2>
+                <div class="recipe-meta">
+                    <div class="meta-item">
+                        <div class="meta-label">Total Time</div>
+                        <div class="meta-value" id="totalTime"></div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">Yields</div>
+                        <div class="meta-value" id="yields"></div>
+                    </div>
+                </div>
+                <img id="recipeImage" class="recipe-image" alt="Recipe" style="display: none;" />
+            </div>
+            
+            <div class="section">
+                <h3>Ingredients</h3>
+                <ul class="ingredients-list" id="ingredients"></ul>
+            </div>
+            
+            <div class="section">
+                <h3>Instructions</h3>
+                <ol class="instructions-list" id="instructions"></ol>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function scrapeRecipe() {
+            const url = document.getElementById('recipeUrl').value.trim();
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+            const recipeDiv = document.getElementById('recipe');
+            const btn = document.querySelector('.btn');
+            
+            if (!url) {
+                showError('Please enter a recipe URL');
+                return;
+            }
+            
+            // Reset UI
+            errorDiv.style.display = 'none';
+            recipeDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to scrape recipe');
+                }
+                
+                // Display recipe
+                displayRecipe(data);
+                
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+                btn.disabled = false;
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        function displayRecipe(recipe) {
+            document.getElementById('recipeTitle').textContent = recipe.title || 'Untitled Recipe';
+            document.getElementById('totalTime').textContent = recipe.total_time || 'N/A';
+            document.getElementById('yields').textContent = recipe.yields || 'N/A';
+            
+            // Display image if available
+            const img = document.getElementById('recipeImage');
+            if (recipe.image) {
+                img.src = recipe.image;
+                img.style.display = 'block';
+            } else {
+                img.style.display = 'none';
+            }
+            
+            // Display ingredients
+            const ingredientsList = document.getElementById('ingredients');
+            ingredientsList.innerHTML = '';
+            if (recipe.ingredients && recipe.ingredients.length > 0) {
+                recipe.ingredients.forEach(ingredient => {
+                    const li = document.createElement('li');
+                    li.textContent = ingredient;
+                    ingredientsList.appendChild(li);
+                });
+            }
+            
+            // Display instructions
+            const instructionsList = document.getElementById('instructions');
+            instructionsList.innerHTML = '';
+            if (recipe.instructions && recipe.instructions.length > 0) {
+                recipe.instructions.forEach(instruction => {
+                    const li = document.createElement('li');
+                    li.textContent = instruction;
+                    instructionsList.appendChild(li);
+                });
+            } else if (typeof recipe.instructions === 'string') {
+                // Handle case where instructions is a string
+                const li = document.createElement('li');
+                li.textContent = recipe.instructions;
+                instructionsList.appendChild(li);
+            }
+            
+            document.getElementById('recipe').style.display = 'block';
+        }
+        
+        // Allow Enter key to submit
+        document.getElementById('recipeUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                scrapeRecipe();
+            }
+        });
+    </script>
+</body>
+</html>
+

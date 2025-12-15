@@ -1,0 +1,4 @@
+Flask==3.0.0
+recipe-scrapers==14.55.0
+Flask-Cors==4.0.0
+
