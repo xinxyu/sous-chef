@@ -6,6 +6,17 @@ A meal planning and recipe app
 2. Grocery list maker - creates a grocery list from recipes
 
 ## Recipe Scraper Setup
+### Virtual Environment Set Up
+
+1. Create the environment
+```bash
+python -m venv venv
+```
+
+2. Activate the environment
+```bash
+source ./venv/bin/activate
+```
 
 ### Installation
 
