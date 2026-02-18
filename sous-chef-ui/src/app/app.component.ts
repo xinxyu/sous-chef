@@ -341,14 +341,12 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   getShoppingListAsText(): string {
-    const lines: string[] = ['Shopping List', ''];
+    const lines: string[] = [];
     for (const r of this.menuRecipes) {
       lines.push(r.title || 'Untitled Recipe');
-      lines.push('');
       for (const ing of r.ingredients || []) {
-        lines.push('• ' + ing);
+        lines.push(ing);
       }
-      lines.push('');
     }
     return lines.join('\n').trim();
   }

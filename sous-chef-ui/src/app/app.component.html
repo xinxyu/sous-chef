@@ -120,7 +120,7 @@
         <div class="meta-item">
           <div class="meta-label">Total Time</div>
           <div class="meta-value">
-            {{ r.total_time ?? 'N/A' }}
+            {{ r.total_time ?? 'N/A' }} minutes
           </div>
         </div>
         <div class="meta-item">
@@ -228,7 +228,7 @@
       <h2>📋 Menu & Shopping List</h2>
       
       <div *ngIf="menuRecipes.length === 0" class="empty-state">
-        <p>No recipes in your menu. Go to My Recipes, select some recipes, and click "Create Menu".</p>
+        <p id="no-recipes-message">No recipes in your menu. Go to My Recipes, select some recipes, and click "Create Menu".</p>
         <button class="btn" (click)="setActiveTab('saved')">Choose Recipes</button>
       </div>
 
@@ -256,15 +256,15 @@
               <div class="shopping-list-view-toggle">
                 <button 
                   class="toggle-btn" 
-                  [class.active]="shoppingListView === 'combined'"
-                  (click)="shoppingListView = 'combined'">
-                  Combined
+                  [class.active]="shoppingListView === 'byRecipe'"
+                  (click)="shoppingListView = 'byRecipe'">
+                  By Recipe
                 </button>
                 <button 
                   class="toggle-btn" 
-                  [class.active]="shoppingListView === 'byRecipe'"
-                  (click)="shoppingListView = 'byRecipe'">
-                  By recipe
+                  [class.active]="shoppingListView === 'combined'"
+                  (click)="shoppingListView = 'combined'">
+                  Combined
                 </button>
               </div>
             </div>
