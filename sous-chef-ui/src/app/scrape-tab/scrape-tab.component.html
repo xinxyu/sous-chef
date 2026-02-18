@@ -6,73 +6,89 @@
       placeholder="Enter recipe URL (e.g., https://www.allrecipes.com/recipe/...)"
       (keyup.enter)="onScrape()"
     />
-    <button class="btn" (click)="onScrape()" [disabled]="loading">
-      {{ loading ? 'Scraping…' : 'Scrape Recipe' }}
+    <button class="btn" (click)="onScrape()" [disabled]="loading()">
+      {{ loading() ? 'Scraping…' : 'Scrape Recipe' }}
     </button>
   </div>
 
-  <div class="error" *ngIf="error">{{ error }}</div>
-  <div class="loading" *ngIf="loading">
-    Scraping recipe... Please wait.
-  </div>
+  @if (error()) {
+    <div class="error">{{ error() }}</div>
+  }
+  @if (loading()) {
+    <div class="loading">Scraping recipe... Please wait.</div>
+  }
 </section>
 
-<section class="card recipe" *ngIf="recipe as r">
-  <div class="recipe-header">
-    <div class="recipe-title-row">
-      <h2>{{ r.title || 'Untitled Recipe' }}</h2>
-      <div class="recipe-header-actions">
-        <button class="btn btn-small" (click)="exportRecipeToPdf()" title="Export to PDF">
-          📄 Export PDF
-        </button>
-        <button
-          class="btn btn-save"
-          (click)="onSaveRecipe()"
-          [disabled]="saving || r.id || !currentUser"
-          *ngIf="!r.id && currentUser">
-          {{ saving ? 'Saving…' : '💾 Save Recipe' }}
-        </button>
-        <span class="saved-badge" *ngIf="r.id">✓ Saved</span>
-        <div *ngIf="!currentUser" class="login-prompt">
-          <a (click)="requestShowLogin()" style="cursor: pointer; color: #667eea;">Login to save recipes</a>
+@if (recipe(); as r) {
+  <section class="card recipe">
+    <div class="recipe-header">
+      <div class="recipe-title-row">
+        <h2>{{ r.title || 'Untitled Recipe' }}</h2>
+        <div class="recipe-header-actions">
+          <button class="btn btn-small" (click)="exportRecipeToPdf()" title="Export to PDF">
+            📄 Export PDF
+          </button>
+          @if (!r.id && currentUser()) {
+            <button
+              class="btn btn-save"
+              (click)="onSaveRecipe()"
+              [disabled]="saving()">
+              {{ saving() ? 'Saving…' : '💾 Save Recipe' }}
+            </button>
+          }
+          @if (r.id) {
+            <span class="saved-badge">✓ Saved</span>
+          }
+          @if (!currentUser()) {
+            <div class="login-prompt">
+              <a (click)="requestShowLogin()" style="cursor: pointer; color: #667eea;">Login to save recipes</a>
+            </div>
+          }
         </div>
       </div>
+
+      <div class="recipe-meta">
+        <div class="meta-item">
+          <div class="meta-label">Total Time</div>
+          <div class="meta-value">{{ r.total_time ?? 'N/A' }} minutes</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Yields</div>
+          <div class="meta-value">{{ r.yields ?? 'N/A' }}</div>
+        </div>
+      </div>
+
+      @if (r.source_url) {
+        <a
+          [href]="r.source_url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="recipe-source-link">
+          🔗 View original recipe
+        </a>
+      }
+
+      @if (r.image) {
+        <img [src]="r.image" alt="Recipe" class="recipe-image" />
+      }
     </div>
 
-    <div class="recipe-meta">
-      <div class="meta-item">
-        <div class="meta-label">Total Time</div>
-        <div class="meta-value">{{ r.total_time ?? 'N/A' }} minutes</div>
-      </div>
-      <div class="meta-item">
-        <div class="meta-label">Yields</div>
-        <div class="meta-value">{{ r.yields ?? 'N/A' }}</div>
-      </div>
+    <div class="section">
+      <h3>Ingredients</h3>
+      <ul class="ingredients-list">
+        @for (i of r.ingredients || []; track i) {
+          <li>{{ i }}</li>
+        }
+      </ul>
     </div>
 
-    <a
-      *ngIf="r.source_url"
-      [href]="r.source_url"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="recipe-source-link">
-      🔗 View original recipe
-    </a>
-
-    <img *ngIf="r.image" [src]="r.image" alt="Recipe" class="recipe-image" />
-  </div>
-
-  <div class="section">
-    <h3>Ingredients</h3>
-    <ul class="ingredients-list">
-      <li *ngFor="let i of r.ingredients">{{ i }}</li>
-    </ul>
-  </div>
-
-  <div class="section">
-    <h3>Instructions</h3>
-    <ol class="instructions-list">
-      <li *ngFor="let step of steps">{{ step }}</li>
-    </ol>
-  </div>
-</section>
+    <div class="section">
+      <h3>Instructions</h3>
+      <ol class="instructions-list">
+        @for (step of steps(); track step) {
+          <li>{{ step }}</li>
+        }
+      </ol>
+    </div>
+  </section>
+}

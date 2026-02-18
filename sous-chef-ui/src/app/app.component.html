@@ -6,89 +6,105 @@
         <p>Scrape recipes from any website</p>
       </div>
       <div class="auth-section">
-        <div *ngIf="currentUser" class="user-info">
-          <span>👤 {{ currentUser.username }}</span>
-          <button class="btn btn-small" (click)="onLogout()">Logout</button>
-        </div>
-        <div *ngIf="!currentUser" class="auth-buttons">
-          <button class="btn btn-small" (click)="showLogin = true; showRegister = false">Login</button>
-          <button class="btn btn-small" (click)="showRegister = true; showLogin = false">Register</button>
-        </div>
+        @if (authService.currentUser(); as currentUser) {
+          <div class="user-info">
+            <span>👤 {{ currentUser.username }}</span>
+            <button class="btn btn-small" (click)="onLogout()">Logout</button>
+          </div>
+        } @else {
+          <div class="auth-buttons">
+            <button class="btn btn-small" (click)="showLogin.set(true); showRegister.set(false)">Login</button>
+            <button class="btn btn-small" (click)="showRegister.set(true); showLogin.set(false)">Register</button>
+          </div>
+        }
       </div>
     </div>
   </header>
 
-  <div class="tabs" *ngIf="currentUser">
-    <button class="tab-button" [class.active]="activeTab === 'scrape'" (click)="setActiveTab('scrape')">
-      🔍 Scrape Recipe
-    </button>
-    <button class="tab-button" [class.active]="activeTab === 'saved'" (click)="setActiveTab('saved')">
-      📚 My Recipes
-    </button>
-    <button class="tab-button" [class.active]="activeTab === 'menu'" (click)="setActiveTab('menu')">
-      📋 Menu & List
-    </button>
-  </div>
+  @if (authService.currentUser()) {
+    <div class="tabs">
+      <button class="tab-button" [class.active]="activeTab() === 'scrape'" (click)="setActiveTab('scrape')">
+        🔍 Scrape Recipe
+      </button>
+      <button class="tab-button" [class.active]="activeTab() === 'saved'" (click)="setActiveTab('saved')">
+        📚 My Recipes
+      </button>
+      <button class="tab-button" [class.active]="activeTab() === 'menu'" (click)="setActiveTab('menu')">
+        📋 Menu &amp; List
+      </button>
+    </div>
+  }
 
   <!-- Login Modal -->
-  <div class="modal-overlay" *ngIf="showLogin" (click)="showLogin = false">
-    <div class="modal" (click)="$event.stopPropagation()">
-      <h2>Login</h2>
-      <form (ngSubmit)="onLogin()">
-        <input type="text" [(ngModel)]="loginUsername" name="loginUsername" placeholder="Username" required />
-        <input type="password" [(ngModel)]="loginPassword" name="loginPassword" placeholder="Password" required />
-        <div class="error" *ngIf="authError">{{ authError }}</div>
-        <div class="modal-actions">
-          <button type="submit" class="btn" [disabled]="authLoading">Login</button>
-          <button type="button" class="btn btn-secondary" (click)="showLogin = false">Cancel</button>
-        </div>
-      </form>
+  @if (showLogin()) {
+    <div class="modal-overlay" (click)="showLogin.set(false)">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h2>Login</h2>
+        <form (ngSubmit)="onLogin()">
+          <input type="text" [(ngModel)]="loginUsername" name="loginUsername" placeholder="Username" required />
+          <input type="password" [(ngModel)]="loginPassword" name="loginPassword" placeholder="Password" required />
+          @if (authError()) {
+            <div class="error">{{ authError() }}</div>
+          }
+          <div class="modal-actions">
+            <button type="submit" class="btn" [disabled]="authLoading()">Login</button>
+            <button type="button" class="btn btn-secondary" (click)="showLogin.set(false)">Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
+  }
 
   <!-- Register Modal -->
-  <div class="modal-overlay" *ngIf="showRegister" (click)="showRegister = false">
-    <div class="modal" (click)="$event.stopPropagation()">
-      <h2>Register</h2>
-      <form (ngSubmit)="onRegister()">
-        <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
-        <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (optional)" />
-        <input type="password" [(ngModel)]="registerPassword" name="registerPassword" placeholder="Password" required />
-        <div class="error" *ngIf="authError">{{ authError }}</div>
-        <div class="modal-actions">
-          <button type="submit" class="btn" [disabled]="authLoading">Register</button>
-          <button type="button" class="btn btn-secondary" (click)="showRegister = false">Cancel</button>
-        </div>
-      </form>
+  @if (showRegister()) {
+    <div class="modal-overlay" (click)="showRegister.set(false)">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h2>Register</h2>
+        <form (ngSubmit)="onRegister()">
+          <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
+          <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (optional)" />
+          <input type="password" [(ngModel)]="registerPassword" name="registerPassword" placeholder="Password" required />
+          @if (authError()) {
+            <div class="error">{{ authError() }}</div>
+          }
+          <div class="modal-actions">
+            <button type="submit" class="btn" [disabled]="authLoading()">Register</button>
+            <button type="button" class="btn btn-secondary" (click)="showRegister.set(false)">Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
+  }
 
   <!-- Scrape Recipe Tab -->
-  <app-scrape-tab
-    *ngIf="activeTab === 'scrape' || !currentUser"
-    [recipe]="recipe"
-    [steps]="steps"
-    [currentUser]="currentUser"
-    (recipeLoaded)="onRecipeLoaded($event)"
-    (recipeSaved)="onRecipeSaved($event)"
-    (showLogin)="showLogin = true">
-  </app-scrape-tab>
+  @if (activeTab() === 'scrape' || !authService.currentUser()) {
+    <app-scrape-tab
+      [recipe]="recipe()"
+      [steps]="steps()"
+      [currentUser]="authService.currentUser()"
+      (recipeLoaded)="onRecipeLoaded($event)"
+      (recipeSaved)="onRecipeSaved($event)"
+      (showLogin)="showLogin.set(true)">
+    </app-scrape-tab>
+  }
 
   <!-- My Recipes Tab -->
-  <app-my-recipes-tab
-    *ngIf="activeTab === 'saved' && currentUser"
-    [savedRecipes]="savedRecipes"
-    [selectedRecipeIds]="selectedRecipeIds"
-    (loadRecipe)="onLoadRecipe($event)"
-    (deleteRecipe)="onDeleteRecipe($event)"
-    (createMenu)="createMenu()"
-    (toggleSelection)="toggleRecipeSelection($event)">
-  </app-my-recipes-tab>
+  @if (activeTab() === 'saved' && authService.currentUser()) {
+    <app-my-recipes-tab
+      [savedRecipes]="savedRecipes()"
+      [selectedRecipeIds]="selectedRecipeIds()"
+      (loadRecipe)="onLoadRecipe($event)"
+      (deleteRecipe)="onDeleteRecipe($event)"
+      (createMenu)="createMenu()"
+      (toggleSelection)="toggleRecipeSelection($event)">
+    </app-my-recipes-tab>
+  }
 
   <!-- Menu & Shopping List Tab -->
-  <app-menu-list-tab
-    *ngIf="activeTab === 'menu' && currentUser"
-    [menuRecipes]="menuRecipes"
-    (changeSelection)="setActiveTab('saved')">
-  </app-menu-list-tab>
+  @if (activeTab() === 'menu' && authService.currentUser()) {
+    <app-menu-list-tab
+      [menuRecipes]="menuRecipes()"
+      (changeSelection)="setActiveTab('saved')">
+    </app-menu-list-tab>
+  }
 </div>

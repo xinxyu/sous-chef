@@ -122,6 +122,51 @@
       },
       "source_url": "https://www.allrecipes.com/recipe/222530/easy-slow-cooker-cheesy-potatoes/",
       "saved_at": "2026-02-18T15:33:15.828984"
+    },
+    "59b9a7cb-1262-4579-ac36-32d39987d02f": {
+      "id": "59b9a7cb-1262-4579-ac36-32d39987d02f",
+      "user_id": "c833c681-bfe7-4d32-9d5f-038ebaae800b",
+      "title": "Pad Thai",
+      "total_time": 30,
+      "yields": "2 servings",
+      "ingredients": [
+        "125 g / 4oz Chang's Pad Thai dried rice sticks ((Note 1))",
+        "1 1/2 tbsp tamarind puree (, NOT concentrate (Note 2))",
+        "3 tbsp (packed) brown sugar",
+        "2 tbsp fish sauce ((Note 3))",
+        "1 1/2 tbsp oyster sauce ((Note 4))",
+        "2 - 3 tbsp vegetable or canola oil",
+        "1/2 onion (, sliced (brown, yellow))",
+        "2 garlic cloves (, finely chopped)",
+        "150 g/5oz chicken breast (or thigh) (, thinly sliced)",
+        "2 eggs (, lightly whisked)",
+        "1 1/2 cups of beansprouts",
+        "1/2 cup firm tofu, cut into 3cm / 1 1/4\" batons (see photo)",
+        "1/4 cup garlic chives , cut into 3cm / 1 1/4\" pieces",
+        "1/4 cup finely chopped peanuts",
+        "Lime wedges ((essential))",
+        "Ground chilli or cayenne pepper ((optional))",
+        "More beansprouts"
+      ],
+      "instructions": [
+        "Place noodles in a large bowl, pour over plenty of boiling water. Soak for 5 minutes, then drain in a colander and quickly rinse under cold water. Don't leave them sitting around for more than 5 - 10 minutes.",
+        "Mix Sauce in small bowl.",
+        "Heat 2 tbsp oil in a large non stick pan (or well seasoned skillet) over high heat. Add garlic and onion, cook for 30 seconds.",
+        "Add chicken and cook for 1 1/2 minutes until mostly cooked through.",
+        "Push to one side of the pan, pour egg in on the other side. Scramble using the wooden spoon (add touch of extra oil if pan is too dry), then mix into chicken.",
+        "Add bean sprouts, tofu, noodles then Sauce.",
+        "Toss gently for about 1 1/2 minutes until Sauce is absorbed by the noodles.",
+        "Add garlic chives and half the peanuts. Toss through quickly then remove from heat.",
+        "Serve immediately, sprinkled with remaining peanuts and lime wedges on the side, with a sprinkle of chilli and a handful of extra beansprouts on the side if desired (this is the Thai way!). Squeeze over lime juice to taste before eating."
+      ],
+      "image": "https://www.recipetineats.com/tachyon/2020/01/Chicken-Pad-Thai_9-SQ.jpg",
+      "host": "recipetineats.com",
+      "nutrients": {
+        "calories": "650 kcal",
+        "servingSize": "1 serving"
+      },
+      "source_url": "https://www.recipetineats.com/chicken-pad-thai/",
+      "saved_at": "2026-02-18T16:55:14.082161"
     }
   }
 }

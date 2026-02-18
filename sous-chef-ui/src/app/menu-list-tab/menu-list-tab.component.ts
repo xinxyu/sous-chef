@@ -1,36 +1,24 @@
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output, signal, computed } from '@angular/core';
 import { Recipe } from '../recipe.service';
 
 @Component({
   selector: 'app-menu-list-tab',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './menu-list-tab.component.html',
   styleUrls: ['./menu-list-tab.component.scss'],
 })
-export class MenuListTabComponent implements OnChanges {
-  @Input() menuRecipes: Recipe[] = [];
+export class MenuListTabComponent {
+  menuRecipes = input<Recipe[]>([]);
 
-  @Output() changeSelection = new EventEmitter<void>();
+  changeSelection = output<void>();
 
-  shoppingListView: 'combined' | 'byRecipe' = 'byRecipe';
-  combinedIngredients: { name: string; amounts: string[] }[] = [];
-  copyFeedback = false;
+  readonly shoppingListView = signal<'combined' | 'byRecipe'>('byRecipe');
+  readonly copyFeedback = signal(false);
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['menuRecipes'] && this.menuRecipes?.length) {
-      this.buildCombinedIngredients();
-    }
-  }
-
-  private buildCombinedIngredients(): void {
-    const allIngredients: string[] = [];
-    this.menuRecipes.forEach((r) => {
-      (r.ingredients || []).forEach((i) => allIngredients.push(i));
-    });
-    this.combinedIngredients = this.combineIngredients(allIngredients);
-  }
+  readonly combinedIngredients = computed(() =>
+    this.buildCombinedIngredientsFromRecipes(this.menuRecipes())
+  );
 
   private getAmountPhrase(ingredient: string): string {
     const trimmed = ingredient.trim();
@@ -64,9 +52,21 @@ export class MenuListTabComponent implements OnChanges {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  private buildCombinedIngredientsFromRecipes(
+    recipes: Recipe[]
+  ): { name: string; amounts: string[] }[] {
+    const allIngredients: string[] = [];
+    for (const r of recipes) {
+      for (const i of r.ingredients || []) {
+        allIngredients.push(i);
+      }
+    }
+    return this.combineIngredients(allIngredients);
+  }
+
   getShoppingListAsText(): string {
     const lines: string[] = ['Shopping List', ''];
-    for (const r of this.menuRecipes) {
+    for (const r of this.menuRecipes()) {
       lines.push(r.title || 'Untitled Recipe');
       lines.push('');
       for (const ing of r.ingredients || []) {
@@ -81,8 +81,8 @@ export class MenuListTabComponent implements OnChanges {
     const text = this.getShoppingListAsText();
     try {
       await navigator.clipboard.writeText(text);
-      this.copyFeedback = true;
-      setTimeout(() => (this.copyFeedback = false), 2000);
+      this.copyFeedback.set(true);
+      setTimeout(() => this.copyFeedback.set(false), 2000);
     } catch {
       const textarea = document.createElement('textarea');
       textarea.value = text;
@@ -92,8 +92,8 @@ export class MenuListTabComponent implements OnChanges {
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      this.copyFeedback = true;
-      setTimeout(() => (this.copyFeedback = false), 2000);
+      this.copyFeedback.set(true);
+      setTimeout(() => this.copyFeedback.set(false), 2000);
     }
   }
 

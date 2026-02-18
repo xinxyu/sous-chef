@@ -1,25 +1,24 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output } from '@angular/core';
 import { Recipe } from '../recipe.service';
 
 @Component({
   selector: 'app-my-recipes-tab',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './my-recipes-tab.component.html',
   styleUrls: ['./my-recipes-tab.component.scss'],
 })
 export class MyRecipesTabComponent {
-  @Input() savedRecipes: Recipe[] = [];
-  @Input() selectedRecipeIds: Set<string> = new Set<string>();
+  savedRecipes = input<Recipe[]>([]);
+  selectedRecipeIds = input<Set<string>>(new Set());
 
-  @Output() loadRecipe = new EventEmitter<string>();
-  @Output() deleteRecipe = new EventEmitter<string>();
-  @Output() createMenu = new EventEmitter<void>();
-  @Output() toggleSelection = new EventEmitter<string>();
+  loadRecipe = output<string>();
+  deleteRecipe = output<string>();
+  createMenu = output<void>();
+  toggleSelection = output<string>();
 
   isSelected(recipeId: string): boolean {
-    return this.selectedRecipeIds.has(recipeId);
+    return this.selectedRecipeIds().has(recipeId);
   }
 
   onLoadRecipe(id: string): void {

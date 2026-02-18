@@ -1,5 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RecipeService, Recipe } from '../recipe.service';
 import { User } from '../auth.service';
@@ -8,72 +7,74 @@ import { jsPDF } from 'jspdf';
 @Component({
   selector: 'app-scrape-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './scrape-tab.component.html',
   styleUrls: ['./scrape-tab.component.scss'],
 })
 export class ScrapeTabComponent {
-  @Input() recipe: Recipe | null = null;
-  @Input() steps: string[] = [];
-  @Input() currentUser: User | null = null;
+  recipe = input<Recipe | null>(null);
+  steps = input<string[]>([]);
+  currentUser = input<User | null>(null);
 
-  @Output() recipeLoaded = new EventEmitter<{ recipe: Recipe; steps: string[] }>();
-  @Output() recipeSaved = new EventEmitter<Recipe>();
-  @Output() showLogin = new EventEmitter<void>();
+  recipeLoaded = output<{ recipe: Recipe; steps: string[] }>();
+  recipeSaved = output<Recipe>();
+  showLogin = output<void>();
 
   url = '';
-  loading = false;
-  saving = false;
-  error: string | null = null;
+  readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly error = signal<string | null>(null);
 
   constructor(private recipeService: RecipeService) {}
 
   onScrape(): void {
-    this.error = null;
+    this.error.set(null);
     const trimmedUrl = this.url.trim();
     if (!trimmedUrl) {
-      this.error = 'Please enter a recipe URL';
+      this.error.set('Please enter a recipe URL');
       return;
     }
 
-    this.loading = true;
+    this.loading.set(true);
     this.recipeService.scrape(trimmedUrl).subscribe({
       next: (data) => {
         const instructions = data.instructions;
         const steps = Array.isArray(instructions)
           ? instructions
           : instructions
-          ? [instructions]
-          : [];
+            ? [instructions]
+            : [];
         this.recipeLoaded.emit({ recipe: data, steps });
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.loading = false;
-        this.error = err?.error?.error || 'Failed to scrape recipe';
+        this.loading.set(false);
+        this.error.set(err?.error?.error || 'Failed to scrape recipe');
       },
     });
   }
 
   onSaveRecipe(): void {
-    if (!this.recipe || !this.currentUser) return;
-    this.saving = true;
-    this.error = null;
-    this.recipeService.saveRecipe(this.recipe).subscribe({
+    const r = this.recipe();
+    const user = this.currentUser();
+    if (!r || !user) return;
+    this.saving.set(true);
+    this.error.set(null);
+    this.recipeService.saveRecipe(r).subscribe({
       next: (savedRecipe) => {
         this.recipeSaved.emit(savedRecipe);
-        this.saving = false;
+        this.saving.set(false);
       },
       error: (err) => {
-        this.saving = false;
-        this.error = err?.error?.error || 'Failed to save recipe';
+        this.saving.set(false);
+        this.error.set(err?.error?.error || 'Failed to save recipe');
       },
     });
   }
 
   exportRecipeToPdf(): void {
-    if (!this.recipe) return;
-    const r = this.recipe;
+    const r = this.recipe();
+    if (!r) return;
     const doc = new jsPDF();
     const margin = 20;
     const pageW = doc.internal.pageSize.getWidth();

@@ -2,51 +2,62 @@
   <h2>📚 My Saved Recipes</h2>
   <p class="menu-hint">Select recipes to add to a menu, then click "Create Menu" for a combined shopping list.</p>
 
-  <div *ngIf="savedRecipes.length === 0" class="empty-state">
-    <p>No saved recipes yet. Scrape and save a recipe to get started!</p>
-  </div>
+  @if (savedRecipes().length === 0) {
+    <div class="empty-state">
+      <p>No saved recipes yet. Scrape and save a recipe to get started!</p>
+    </div>
+  }
 
-  <div *ngIf="savedRecipes.length > 0">
+  @if (savedRecipes().length > 0) {
     <div class="menu-actions">
       <button
         class="btn"
-        [disabled]="selectedRecipeIds.size === 0"
+        [disabled]="selectedRecipeIds().size === 0"
         (click)="onCreateMenu()">
-        Create Menu ({{ selectedRecipeIds.size }} selected)
+        Create Menu ({{ selectedRecipeIds().size }} selected)
       </button>
     </div>
     <div class="recipes-list">
-      <div
-        class="recipe-list-item selectable"
-        *ngFor="let savedRecipe of savedRecipes"
-        [class.selected]="isSelected(savedRecipe.id!)"
-        (click)="onLoadRecipe(savedRecipe.id!)">
-        <div class="recipe-list-content">
-          <label class="recipe-checkbox" (click)="$event.stopPropagation()">
-            <input
-              type="checkbox"
-              [checked]="isSelected(savedRecipe.id!)"
-              (click)="onToggleSelection(savedRecipe.id!, $event); $event.stopPropagation()" />
-          </label>
-          <div class="recipe-list-image" *ngIf="savedRecipe.image">
-            <img [src]="savedRecipe.image" alt="Recipe" />
-          </div>
-          <div class="recipe-list-info">
-            <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
-            <div class="recipe-list-meta">
-              <span *ngIf="savedRecipe.total_time">⏱️ {{ savedRecipe.total_time }}</span>
-              <span *ngIf="savedRecipe.yields">🍽️ {{ savedRecipe.yields }}</span>
-              <span *ngIf="savedRecipe.host">📍 {{ savedRecipe.host }}</span>
+      @for (savedRecipe of savedRecipes(); track savedRecipe.id) {
+        <div
+          class="recipe-list-item selectable"
+          [class.selected]="isSelected(savedRecipe.id!)"
+          (click)="onLoadRecipe(savedRecipe.id!)">
+          <div class="recipe-list-content">
+            <label class="recipe-checkbox" (click)="$event.stopPropagation()">
+              <input
+                type="checkbox"
+                [checked]="isSelected(savedRecipe.id!)"
+                (click)="onToggleSelection(savedRecipe.id!, $event); $event.stopPropagation()" />
+            </label>
+            @if (savedRecipe.image) {
+              <div class="recipe-list-image">
+                <img [src]="savedRecipe.image" alt="Recipe" />
+              </div>
+            }
+            <div class="recipe-list-info">
+              <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
+              <div class="recipe-list-meta">
+                @if (savedRecipe.total_time) {
+                  <span>⏱️ {{ savedRecipe.total_time }}</span>
+                }
+                @if (savedRecipe.yields) {
+                  <span>🍽️ {{ savedRecipe.yields }}</span>
+                }
+                @if (savedRecipe.host) {
+                  <span>📍 {{ savedRecipe.host }}</span>
+                }
+              </div>
             </div>
           </div>
+          <button
+            class="btn-delete-list"
+            (click)="onDeleteRecipe(savedRecipe.id!, $event)"
+            title="Delete recipe">
+            ×
+          </button>
         </div>
-        <button
-          class="btn-delete-list"
-          (click)="onDeleteRecipe(savedRecipe.id!, $event)"
-          title="Delete recipe">
-          ×
-        </button>
-      </div>
+      }
     </div>
-  </div>
+  }
 </section>

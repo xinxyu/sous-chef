@@ -1,9 +1,7 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, effect, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RecipeService, Recipe } from './recipe.service';
 import { AuthService, User } from './auth.service';
-import { Subscription } from 'rxjs';
 import { ScrapeTabComponent } from './scrape-tab/scrape-tab.component';
 import { MyRecipesTabComponent } from './my-recipes-tab/my-recipes-tab.component';
 import { MenuListTabComponent } from './menu-list-tab/menu-list-tab.component';
@@ -12,7 +10,6 @@ import { MenuListTabComponent } from './menu-list-tab/menu-list-tab.component';
   selector: 'app-root',
   standalone: true,
   imports: [
-    CommonModule,
     FormsModule,
     ScrapeTabComponent,
     MyRecipesTabComponent,
@@ -21,55 +18,51 @@ import { MenuListTabComponent } from './menu-list-tab/menu-list-tab.component';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent implements OnInit, OnDestroy {
-  title = 'Sous Chef';
-  recipe: Recipe | null = null;
-  steps: string[] = [];
-  savedRecipes: Recipe[] = [];
-  activeTab: 'scrape' | 'saved' | 'menu' = 'scrape';
-  selectedRecipeIds = new Set<string>();
-  menuRecipes: Recipe[] = [];
+export class AppComponent {
+  readonly title = 'Sous Chef';
 
-  currentUser: User | null = null;
-  showLogin = false;
-  showRegister = false;
+  readonly recipe = signal<Recipe | null>(null);
+  readonly steps = signal<string[]>([]);
+  readonly savedRecipes = signal<Recipe[]>([]);
+  readonly activeTab = signal<'scrape' | 'saved' | 'menu'>('scrape');
+  readonly selectedRecipeIds = signal<Set<string>>(new Set());
+  readonly menuRecipes = signal<Recipe[]>([]);
+
+  readonly showLogin = signal(false);
+  readonly showRegister = signal(false);
+  readonly authError = signal<string | null>(null);
+  readonly authLoading = signal(false);
+
   loginUsername = '';
   loginPassword = '';
   registerUsername = '';
   registerEmail = '';
   registerPassword = '';
-  authError: string | null = null;
-  authLoading = false;
-
-  private subscriptions = new Subscription();
 
   constructor(
     private recipeService: RecipeService,
-    private authService: AuthService
-  ) {}
-
-  ngOnInit(): void {
-    const userSub = this.authService.currentUser$.subscribe((user) => {
-      this.currentUser = user;
-      if (user) {
-        if (this.activeTab === 'saved') {
-          this.loadSavedRecipes();
-        }
-      } else {
-        this.savedRecipes = [];
-        this.activeTab = 'scrape';
+    public authService: AuthService
+  ) {
+    effect(() => {
+      const user = this.authService.currentUser();
+      if (!user) {
+        this.savedRecipes.set([]);
+        this.activeTab.set('scrape');
       }
     });
-    this.subscriptions.add(userSub);
-  }
-
-  ngOnDestroy(): void {
-    this.subscriptions.unsubscribe();
+    effect(() => {
+      const user = this.authService.currentUser();
+      const tab = this.activeTab();
+      if (user && tab === 'saved') {
+        this.loadSavedRecipes();
+      }
+    });
   }
 
   setActiveTab(tab: 'scrape' | 'saved' | 'menu'): void {
-    this.activeTab = tab;
-    if (tab === 'saved' && this.currentUser) {
+    this.activeTab.set(tab);
+    const user = this.authService.currentUser();
+    if (tab === 'saved' && user) {
       this.loadSavedRecipes();
     }
     if (tab === 'menu') {
@@ -78,64 +71,66 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onRecipeLoaded(event: { recipe: Recipe; steps: string[] }): void {
-    this.recipe = event.recipe;
-    this.steps = event.steps;
+    this.recipe.set(event.recipe);
+    this.steps.set(event.steps);
   }
 
   onRecipeSaved(savedRecipe: Recipe): void {
-    this.recipe = savedRecipe;
+    this.recipe.set(savedRecipe);
     this.loadSavedRecipes();
   }
 
   loadSavedRecipes(): void {
-    if (!this.currentUser) return;
+    const user = this.authService.currentUser();
+    if (!user) return;
     this.recipeService.getRecipes().subscribe({
-      next: (recipes) => (this.savedRecipes = recipes),
+      next: (recipes) => this.savedRecipes.set(recipes),
       error: (err) => console.error('Failed to load saved recipes:', err),
     });
   }
 
   onLoadRecipe(id: string): void {
-    this.activeTab = 'scrape';
+    this.activeTab.set('scrape');
     this.recipeService.getRecipe(id).subscribe({
       next: (recipe) => {
-        this.recipe = recipe;
+        this.recipe.set(recipe);
         const instructions = recipe.instructions;
-        this.steps = Array.isArray(instructions)
+        const steps = Array.isArray(instructions)
           ? instructions
           : instructions
-          ? [instructions]
-          : [];
+            ? [instructions]
+            : [];
+        this.steps.set(steps);
         setTimeout(() => {
           document.querySelector('.recipe')?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
       },
-      error: (err) => {
-        this.recipe = null;
-        this.steps = [];
+      error: () => {
+        this.recipe.set(null);
+        this.steps.set([]);
       },
     });
   }
 
   toggleRecipeSelection(recipeId: string): void {
-    if (this.selectedRecipeIds.has(recipeId)) {
-      this.selectedRecipeIds.delete(recipeId);
-    } else {
-      this.selectedRecipeIds.add(recipeId);
-    }
-    this.selectedRecipeIds = new Set(this.selectedRecipeIds);
+    this.selectedRecipeIds.update((ids) => {
+      const next = new Set(ids);
+      if (next.has(recipeId)) next.delete(recipeId);
+      else next.add(recipeId);
+      return next;
+    });
   }
 
   createMenu(): void {
-    if (this.selectedRecipeIds.size === 0) return;
-    this.activeTab = 'menu';
+    if (this.selectedRecipeIds().size === 0) return;
+    this.activeTab.set('menu');
     this.buildMenuRecipes();
   }
 
   buildMenuRecipes(): void {
-    this.menuRecipes = this.savedRecipes.filter(
-      (r) => r.id && this.selectedRecipeIds.has(r.id)
-    );
+    const saved = this.savedRecipes();
+    const ids = this.selectedRecipeIds();
+    this.menuRecipes.set(saved.filter((r) => r.id != null && ids.has(r.id)));
   }
 
   onDeleteRecipe(id: string): void {
@@ -143,9 +138,9 @@ export class AppComponent implements OnInit, OnDestroy {
     this.recipeService.deleteRecipe(id).subscribe({
       next: () => {
         this.loadSavedRecipes();
-        if (this.recipe?.id === id) {
-          this.recipe = null;
-          this.steps = [];
+        if (this.recipe()?.id === id) {
+          this.recipe.set(null);
+          this.steps.set([]);
         }
       },
       error: (err) => console.error(err),
@@ -153,38 +148,38 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onLogin(): void {
-    this.authError = null;
-    this.authLoading = true;
+    this.authError.set(null);
+    this.authLoading.set(true);
     this.authService.login(this.loginUsername, this.loginPassword).subscribe({
       next: () => {
-        this.authLoading = false;
-        this.showLogin = false;
+        this.authLoading.set(false);
+        this.showLogin.set(false);
         this.loginUsername = '';
         this.loginPassword = '';
       },
       error: (err) => {
-        this.authLoading = false;
-        this.authError = err?.error?.error || 'Login failed';
+        this.authLoading.set(false);
+        this.authError.set(err?.error?.error || 'Login failed');
       },
     });
   }
 
   onRegister(): void {
-    this.authError = null;
-    this.authLoading = true;
+    this.authError.set(null);
+    this.authLoading.set(true);
     this.authService
       .register(this.registerUsername, this.registerPassword, this.registerEmail || undefined)
       .subscribe({
         next: () => {
-          this.authLoading = false;
-          this.showRegister = false;
+          this.authLoading.set(false);
+          this.showRegister.set(false);
           this.registerUsername = '';
           this.registerEmail = '';
           this.registerPassword = '';
         },
         error: (err) => {
-          this.authLoading = false;
-          this.authError = err?.error?.error || 'Registration failed';
+          this.authLoading.set(false);
+          this.authError.set(err?.error?.error || 'Registration failed');
         },
       });
   }
@@ -192,12 +187,11 @@ export class AppComponent implements OnInit, OnDestroy {
   onLogout(): void {
     this.authService.logout().subscribe({
       next: () => {
-        this.recipe = null;
-        this.savedRecipes = [];
-        this.steps = [];
-        this.selectedRecipeIds.clear();
-        this.selectedRecipeIds = new Set();
-        this.menuRecipes = [];
+        this.recipe.set(null);
+        this.savedRecipes.set([]);
+        this.steps.set([]);
+        this.selectedRecipeIds.set(new Set());
+        this.menuRecipes.set([]);
       },
       error: (err) => console.error('Logout error:', err),
     });
