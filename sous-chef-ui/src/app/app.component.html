@@ -1,31 +1,109 @@
 <div class="container">
   <header class="header">
-    <h1>🍳 {{ title }}</h1>
-    <p>Scrape recipes from any website</p>
+    <div class="header-top">
+      <div>
+        <h1>🍳 {{ title }}</h1>
+        <p>Scrape recipes from any website</p>
+      </div>
+      <div class="auth-section">
+        <div *ngIf="currentUser" class="user-info">
+          <span>👤 {{ currentUser.username }}</span>
+          <button class="btn btn-small" (click)="onLogout()">Logout</button>
+        </div>
+        <div *ngIf="!currentUser" class="auth-buttons">
+          <button class="btn btn-small" (click)="showLogin = true; showRegister = false">Login</button>
+          <button class="btn btn-small" (click)="showRegister = true; showLogin = false">Register</button>
+        </div>
+      </div>
+    </div>
   </header>
 
-  <section class="card">
-    <div class="input-group">
-      <input
-        type="url"
-        [(ngModel)]="url"
-        placeholder="Enter recipe URL (e.g., https://www.allrecipes.com/recipe/...)"
-        (keyup.enter)="onScrape()"
-      />
-      <button class="btn" (click)="onScrape()" [disabled]="loading">
-        {{ loading ? 'Scraping…' : 'Scrape Recipe' }}
-      </button>
-    </div>
+  <!-- Tab Navigation -->
+  <div class="tabs" *ngIf="currentUser">
+    <button 
+      class="tab-button" 
+      [class.active]="activeTab === 'scrape'"
+      (click)="setActiveTab('scrape')">
+      🔍 Scrape Recipe
+    </button>
+    <button 
+      class="tab-button" 
+      [class.active]="activeTab === 'saved'"
+      (click)="setActiveTab('saved')">
+      📚 My Recipes
+    </button>
+  </div>
 
-    <div class="error" *ngIf="error">{{ error }}</div>
-    <div class="loading" *ngIf="loading">
-      Scraping recipe... Please wait.
+  <!-- Login Modal -->
+  <div class="modal-overlay" *ngIf="showLogin" (click)="showLogin = false">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h2>Login</h2>
+      <form (ngSubmit)="onLogin()">
+        <input type="text" [(ngModel)]="loginUsername" name="loginUsername" placeholder="Username" required />
+        <input type="password" [(ngModel)]="loginPassword" name="loginPassword" placeholder="Password" required />
+        <div class="error" *ngIf="authError">{{ authError }}</div>
+        <div class="modal-actions">
+          <button type="submit" class="btn" [disabled]="authLoading">Login</button>
+          <button type="button" class="btn btn-secondary" (click)="showLogin = false">Cancel</button>
+        </div>
+      </form>
     </div>
-  </section>
+  </div>
 
-  <section class="card recipe" *ngIf="recipe as r">
+  <!-- Register Modal -->
+  <div class="modal-overlay" *ngIf="showRegister" (click)="showRegister = false">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h2>Register</h2>
+      <form (ngSubmit)="onRegister()">
+        <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
+        <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (optional)" />
+        <input type="password" [(ngModel)]="registerPassword" name="registerPassword" placeholder="Password" required />
+        <div class="error" *ngIf="authError">{{ authError }}</div>
+        <div class="modal-actions">
+          <button type="submit" class="btn" [disabled]="authLoading">Register</button>
+          <button type="button" class="btn btn-secondary" (click)="showRegister = false">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scrape Recipe Tab -->
+  <div *ngIf="activeTab === 'scrape' || !currentUser">
+    <section class="card">
+      <div class="input-group">
+        <input
+          type="url"
+          [(ngModel)]="url"
+          placeholder="Enter recipe URL (e.g., https://www.allrecipes.com/recipe/...)"
+          (keyup.enter)="onScrape()"
+        />
+        <button class="btn" (click)="onScrape()" [disabled]="loading">
+          {{ loading ? 'Scraping…' : 'Scrape Recipe' }}
+        </button>
+      </div>
+
+      <div class="error" *ngIf="error">{{ error }}</div>
+      <div class="loading" *ngIf="loading">
+        Scraping recipe... Please wait.
+      </div>
+    </section>
+
+    <section class="card recipe" *ngIf="recipe as r">
     <div class="recipe-header">
-      <h2>{{ r.title || 'Untitled Recipe' }}</h2>
+      <div class="recipe-title-row">
+        <h2>{{ r.title || 'Untitled Recipe' }}</h2>
+        <button 
+          class="btn btn-save" 
+          (click)="onSaveRecipe()" 
+          [disabled]="saving || r.id || !currentUser"
+          *ngIf="!r.id && currentUser">
+          {{ saving ? 'Saving…' : '💾 Save Recipe' }}
+        </button>
+        <span class="saved-badge" *ngIf="r.id">✓ Saved</span>
+        <div *ngIf="!currentUser" class="login-prompt">
+          <a (click)="showLogin = true" style="cursor: pointer; color: #667eea;">Login to save recipes</a>
+        </div>
+      </div>
 
       <div class="recipe-meta">
         <div class="meta-item">
@@ -66,4 +144,43 @@
       </ol>
     </div>
   </section>
+  </div>
+
+  <!-- Saved Recipes Tab -->
+  <div *ngIf="activeTab === 'saved' && currentUser">
+    <section class="card saved-recipes-list">
+      <h2>📚 My Saved Recipes</h2>
+      
+      <div *ngIf="savedRecipes.length === 0" class="empty-state">
+        <p>No saved recipes yet. Scrape and save a recipe to get started!</p>
+      </div>
+
+      <div *ngIf="savedRecipes.length > 0" class="recipes-list">
+        <div 
+          class="recipe-list-item" 
+          *ngFor="let savedRecipe of savedRecipes"
+          (click)="onLoadRecipe(savedRecipe.id!)">
+          <div class="recipe-list-content">
+            <div class="recipe-list-image" *ngIf="savedRecipe.image">
+              <img [src]="savedRecipe.image" alt="Recipe" />
+            </div>
+            <div class="recipe-list-info">
+              <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
+              <div class="recipe-list-meta">
+                <span *ngIf="savedRecipe.total_time">⏱️ {{ savedRecipe.total_time }}</span>
+                <span *ngIf="savedRecipe.yields">🍽️ {{ savedRecipe.yields }}</span>
+                <span *ngIf="savedRecipe.host">📍 {{ savedRecipe.host }}</span>
+              </div>
+            </div>
+          </div>
+          <button 
+            class="btn-delete-list" 
+            (click)="onDeleteRecipe(savedRecipe.id!); $event.stopPropagation()" 
+            title="Delete recipe">
+            ×
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
 </div>

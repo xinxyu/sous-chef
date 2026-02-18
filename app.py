@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from recipe_scrapers import scrape_me
 from flask_cors import CORS
 import logging
@@ -6,11 +6,21 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import json
+import os
+from datetime import datetime
+import uuid
+import hashlib
+from functools import wraps
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+CORS(app, supports_credentials=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Storage files
+RECIPES_FILE = 'saved_recipes.json'
+USERS_FILE = 'users.json'
 
 
 def fallback_parse_ingredients(url):
@@ -265,6 +275,7 @@ def scrape_recipe():
             'image': scraper.image(),
             'host': scraper.host(),
             'nutrients': scraper.nutrients() if hasattr(scraper, 'nutrients') else None,
+            'source_url': url,
         }
         
         return jsonify(recipe_data), 200
@@ -272,6 +283,307 @@ def scrape_recipe():
     except Exception as e:
         logger.error(f"Error scraping recipe: {str(e)}")
         return jsonify({'error': f'Failed to scrape recipe: {str(e)}'}), 500
+
+
+# User management functions
+def load_users():
+    """Load users from file."""
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading users: {e}")
+            return {}
+    return {}
+
+def save_users(users):
+    """Save users to file."""
+    try:
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving users: {e}")
+        return False
+
+def hash_password(password):
+    """Hash a password using SHA256."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def get_current_user_id():
+    """Get the current logged-in user ID from session."""
+    return session.get('user_id')
+
+def require_auth(f):
+    """Decorator to require authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# Recipe storage functions (per-user)
+def load_recipes():
+    """Load saved recipes from file, organized by user."""
+    if os.path.exists(RECIPES_FILE):
+        try:
+            with open(RECIPES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading recipes: {e}")
+            return {}
+    return {}
+
+def save_recipes(recipes):
+    """Save recipes to file."""
+    try:
+        with open(RECIPES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(recipes, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving recipes: {e}")
+        return False
+
+
+# Authentication endpoints
+@app.route('/auth/register', methods=['POST'])
+def register():
+    """Register a new user."""
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        email = data.get('email', '').strip()
+        
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        if len(username) < 3:
+            return jsonify({'error': 'Username must be at least 3 characters'}), 400
+        
+        if len(password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        
+        users = load_users()
+        
+        # Check if username already exists
+        if username in users:
+            return jsonify({'error': 'Username already exists'}), 400
+        
+        # Create new user
+        user_id = str(uuid.uuid4())
+        users[username] = {
+            'id': user_id,
+            'username': username,
+            'email': email,
+            'password_hash': hash_password(password),
+            'created_at': datetime.now().isoformat(),
+        }
+        
+        if save_users(users):
+            # Auto-login after registration
+            session['user_id'] = user_id
+            session['username'] = username
+            logger.info(f"Registered new user: {username}")
+            return jsonify({
+                'message': 'User registered successfully',
+                'user': {
+                    'id': user_id,
+                    'username': username,
+                    'email': email,
+                }
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to save user'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error registering user: {str(e)}")
+        return jsonify({'error': f'Failed to register user: {str(e)}'}), 500
+
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    """Login a user."""
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        users = load_users()
+        
+        if username not in users:
+            return jsonify({'error': 'Invalid username or password'}), 401
+        
+        user = users[username]
+        password_hash = hash_password(password)
+        
+        if user['password_hash'] != password_hash:
+            return jsonify({'error': 'Invalid username or password'}), 401
+        
+        # Set session
+        session['user_id'] = user['id']
+        session['username'] = username
+        
+        logger.info(f"User logged in: {username}")
+        return jsonify({
+            'message': 'Login successful',
+            'user': {
+                'id': user['id'],
+                'username': username,
+                'email': user.get('email'),
+            }
+        }), 200
+            
+    except Exception as e:
+        logger.error(f"Error logging in: {str(e)}")
+        return jsonify({'error': f'Failed to login: {str(e)}'}), 500
+
+
+@app.route('/auth/logout', methods=['POST'])
+def logout():
+    """Logout the current user."""
+    session.clear()
+    return jsonify({'message': 'Logout successful'}), 200
+
+
+@app.route('/auth/me', methods=['GET'])
+def get_current_user():
+    """Get the current logged-in user."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'user': None}), 200
+    
+    users = load_users()
+    username = session.get('username')
+    
+    if username and username in users:
+        user = users[username]
+        return jsonify({
+            'user': {
+                'id': user['id'],
+                'username': username,
+                'email': user.get('email'),
+            }
+        }), 200
+    
+    return jsonify({'user': None}), 200
+
+
+# Recipe endpoints (now per-user)
+@app.route('/recipes', methods=['POST'])
+@require_auth
+def save_recipe():
+    """Save a recipe for the current user."""
+    try:
+        user_id = get_current_user_id()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Recipe data is required'}), 400
+        
+        # Generate unique ID if not provided
+        recipe_id = data.get('id') or str(uuid.uuid4())
+        
+        # Add timestamp and user_id
+        recipe_data = {
+            'id': recipe_id,
+            'user_id': user_id,
+            'title': data.get('title'),
+            'total_time': data.get('total_time'),
+            'yields': data.get('yields'),
+            'ingredients': data.get('ingredients', []),
+            'instructions': data.get('instructions', []),
+            'image': data.get('image'),
+            'host': data.get('host'),
+            'nutrients': data.get('nutrients'),
+            'source_url': data.get('source_url'),
+            'saved_at': datetime.now().isoformat(),
+        }
+        
+        recipes = load_recipes()
+        
+        # Initialize user's recipe list if needed
+        if user_id not in recipes:
+            recipes[user_id] = {}
+        
+        recipes[user_id][recipe_id] = recipe_data
+        
+        if save_recipes(recipes):
+            logger.info(f"Saved recipe {recipe_id} for user {user_id}")
+            return jsonify(recipe_data), 201
+        else:
+            return jsonify({'error': 'Failed to save recipe'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error saving recipe: {str(e)}")
+        return jsonify({'error': f'Failed to save recipe: {str(e)}'}), 500
+
+
+@app.route('/recipes', methods=['GET'])
+@require_auth
+def list_recipes():
+    """Get all saved recipes for the current user."""
+    try:
+        user_id = get_current_user_id()
+        recipes = load_recipes()
+        
+        # Get recipes for current user
+        user_recipes = recipes.get(user_id, {})
+        
+        # Return as list sorted by saved_at (most recent first)
+        recipe_list = list(user_recipes.values())
+        recipe_list.sort(key=lambda x: x.get('saved_at', ''), reverse=True)
+        return jsonify(recipe_list), 200
+    except Exception as e:
+        logger.error(f"Error listing recipes: {str(e)}")
+        return jsonify({'error': f'Failed to list recipes: {str(e)}'}), 500
+
+
+@app.route('/recipes/<recipe_id>', methods=['GET'])
+@require_auth
+def get_recipe(recipe_id):
+    """Get a specific recipe by ID (only if it belongs to the current user)."""
+    try:
+        user_id = get_current_user_id()
+        recipes = load_recipes()
+        
+        user_recipes = recipes.get(user_id, {})
+        if recipe_id in user_recipes:
+            return jsonify(user_recipes[recipe_id]), 200
+        else:
+            return jsonify({'error': 'Recipe not found'}), 404
+    except Exception as e:
+        logger.error(f"Error getting recipe: {str(e)}")
+        return jsonify({'error': f'Failed to get recipe: {str(e)}'}), 500
+
+
+@app.route('/recipes/<recipe_id>', methods=['DELETE'])
+@require_auth
+def delete_recipe(recipe_id):
+    """Delete a recipe by ID (only if it belongs to the current user)."""
+    try:
+        user_id = get_current_user_id()
+        recipes = load_recipes()
+        
+        if user_id in recipes and recipe_id in recipes[user_id]:
+            del recipes[user_id][recipe_id]
+            if save_recipes(recipes):
+                logger.info(f"Deleted recipe {recipe_id} for user {user_id}")
+                return jsonify({'message': 'Recipe deleted successfully'}), 200
+            else:
+                return jsonify({'error': 'Failed to save after deletion'}), 500
+        else:
+            return jsonify({'error': 'Recipe not found'}), 404
+    except Exception as e:
+        logger.error(f"Error deleting recipe: {str(e)}")
+        return jsonify({'error': f'Failed to delete recipe: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
