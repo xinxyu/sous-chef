@@ -1,0 +1,170 @@
+:host {
+  display: block;
+}
+
+.menu-card h2 {
+  color: #333;
+  font-size: 1.8em;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.menu-card h3 {
+  color: #667eea;
+  font-size: 1.3em;
+  margin: 25px 0 15px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.menu-actions {
+  margin-bottom: 20px;
+}
+
+.menu-recipes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  li {
+    padding: 10px 15px;
+    background: #f8f9fa;
+    margin: 6px 0;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+  }
+}
+
+.shopping-list-section {
+  margin-top: 30px;
+}
+
+.shopping-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+.shopping-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-copy {
+  padding: 8px 14px;
+  font-size: 14px;
+  white-space: nowrap;
+  &.copied {
+    background: #4caf50;
+    color: white;
+  }
+}
+
+.shopping-list-view-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #e0e0e0;
+}
+
+.toggle-btn {
+  padding: 8px 16px;
+  border: none;
+  background: #f8f9fa;
+  color: #666;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background: #e9ecef;
+    color: #333;
+  }
+  &.active {
+    background: #667eea;
+    color: white;
+  }
+}
+
+.shopping-list-intro {
+  color: #666;
+  margin-bottom: 15px;
+  font-size: 0.95em;
+}
+
+.shopping-list-by-recipe {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.shopping-recipe-block {
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.shopping-recipe-title {
+  margin: 0;
+  padding: 12px 15px;
+  background: #667eea;
+  color: white;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.shopping-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.shopping-recipe-block .shopping-list {
+  margin: 0;
+  padding: 10px 15px 15px;
+}
+
+.shopping-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 15px;
+  padding: 12px 15px;
+  background: #f8f9fa;
+  margin: 8px 0;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+  flex-wrap: wrap;
+}
+
+.shopping-recipe-block .shopping-list-item {
+  border-left-color: #667eea;
+}
+
+.shopping-list-name {
+  font-weight: 600;
+  color: #333;
+  text-transform: capitalize;
+}
+
+.shopping-list-amounts {
+  color: #666;
+  font-size: 0.95em;
+  text-align: right;
+}
+
+.shopping-list-ingredient-full {
+  display: block;
+  color: #333;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}

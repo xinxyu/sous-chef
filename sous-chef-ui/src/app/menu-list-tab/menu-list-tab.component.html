@@ -1,0 +1,72 @@
+<section class="card menu-card">
+  <h2>📋 Menu & Shopping List</h2>
+
+  <div *ngIf="menuRecipes.length === 0" class="empty-state">
+    <p>No recipes in your menu. Go to My Recipes, select some recipes, and click "Create Menu".</p>
+    <button class="btn" (click)="onChangeSelection()">Choose Recipes</button>
+  </div>
+
+  <div *ngIf="menuRecipes.length > 0">
+    <div class="menu-actions">
+      <button class="btn btn-secondary" (click)="onChangeSelection()">Change selection</button>
+    </div>
+    <div class="menu-recipes-section">
+      <h3>Menu</h3>
+      <ul class="menu-recipes-list">
+        <li *ngFor="let r of menuRecipes">{{ r.title || 'Untitled Recipe' }}</li>
+      </ul>
+    </div>
+    <div class="shopping-list-section">
+      <div class="shopping-list-header">
+        <h3>🛒 Shopping List</h3>
+        <div class="shopping-list-actions">
+          <button
+            class="btn btn-copy"
+            (click)="copyShoppingList()"
+            [class.copied]="copyFeedback"
+            title="Copy list for notes">
+            {{ copyFeedback ? '✓ Copied!' : '📋 Copy for notes' }}
+          </button>
+          <div class="shopping-list-view-toggle">
+            <button
+              class="toggle-btn"
+              [class.active]="shoppingListView === 'byRecipe'"
+              (click)="shoppingListView = 'byRecipe'">
+              By Recipe
+            </button>
+            <button
+              class="toggle-btn"
+              [class.active]="shoppingListView === 'combined'"
+              (click)="shoppingListView = 'combined'">
+              Combined
+            </button>
+          </div>
+        </div>
+      </div>
+      <p class="shopping-list-intro" *ngIf="shoppingListView === 'combined'">
+        Ingredients merged by item across all recipes:
+      </p>
+      <p class="shopping-list-intro" *ngIf="shoppingListView === 'byRecipe'">
+        Ingredients listed under each recipe. Use "Copy for notes" to paste into your note app.
+      </p>
+
+      <ul class="shopping-list" *ngIf="shoppingListView === 'combined'">
+        <li *ngFor="let item of combinedIngredients" class="shopping-list-item">
+          <span class="shopping-list-name">{{ item.name }}</span>
+          <span class="shopping-list-amounts">{{ item.amounts.join(' + ') }}</span>
+        </li>
+      </ul>
+
+      <div class="shopping-list-by-recipe" *ngIf="shoppingListView === 'byRecipe'">
+        <div class="shopping-recipe-block" *ngFor="let r of menuRecipes">
+          <h4 class="shopping-recipe-title">{{ r.title || 'Untitled Recipe' }}</h4>
+          <ul class="shopping-list">
+            <li *ngFor="let ing of r.ingredients" class="shopping-list-item">
+              <span class="shopping-list-ingredient-full">{{ ing }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

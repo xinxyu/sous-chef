@@ -1,0 +1,78 @@
+<section class="card">
+  <div class="input-group">
+    <input
+      type="url"
+      [(ngModel)]="url"
+      placeholder="Enter recipe URL (e.g., https://www.allrecipes.com/recipe/...)"
+      (keyup.enter)="onScrape()"
+    />
+    <button class="btn" (click)="onScrape()" [disabled]="loading">
+      {{ loading ? 'Scraping…' : 'Scrape Recipe' }}
+    </button>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+  <div class="loading" *ngIf="loading">
+    Scraping recipe... Please wait.
+  </div>
+</section>
+
+<section class="card recipe" *ngIf="recipe as r">
+  <div class="recipe-header">
+    <div class="recipe-title-row">
+      <h2>{{ r.title || 'Untitled Recipe' }}</h2>
+      <div class="recipe-header-actions">
+        <button class="btn btn-small" (click)="exportRecipeToPdf()" title="Export to PDF">
+          📄 Export PDF
+        </button>
+        <button
+          class="btn btn-save"
+          (click)="onSaveRecipe()"
+          [disabled]="saving || r.id || !currentUser"
+          *ngIf="!r.id && currentUser">
+          {{ saving ? 'Saving…' : '💾 Save Recipe' }}
+        </button>
+        <span class="saved-badge" *ngIf="r.id">✓ Saved</span>
+        <div *ngIf="!currentUser" class="login-prompt">
+          <a (click)="requestShowLogin()" style="cursor: pointer; color: #667eea;">Login to save recipes</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="recipe-meta">
+      <div class="meta-item">
+        <div class="meta-label">Total Time</div>
+        <div class="meta-value">{{ r.total_time ?? 'N/A' }} minutes</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Yields</div>
+        <div class="meta-value">{{ r.yields ?? 'N/A' }}</div>
+      </div>
+    </div>
+
+    <a
+      *ngIf="r.source_url"
+      [href]="r.source_url"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="recipe-source-link">
+      🔗 View original recipe
+    </a>
+
+    <img *ngIf="r.image" [src]="r.image" alt="Recipe" class="recipe-image" />
+  </div>
+
+  <div class="section">
+    <h3>Ingredients</h3>
+    <ul class="ingredients-list">
+      <li *ngFor="let i of r.ingredients">{{ i }}</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h3>Instructions</h3>
+    <ol class="instructions-list">
+      <li *ngFor="let step of steps">{{ step }}</li>
+    </ol>
+  </div>
+</section>
