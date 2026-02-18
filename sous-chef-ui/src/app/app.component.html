@@ -32,6 +32,12 @@
       (click)="setActiveTab('saved')">
       📚 My Recipes
     </button>
+    <button 
+      class="tab-button" 
+      [class.active]="activeTab === 'menu'"
+      (click)="setActiveTab('menu')">
+      📋 Menu & List
+    </button>
   </div>
 
   <!-- Login Modal -->
@@ -92,16 +98,21 @@
     <div class="recipe-header">
       <div class="recipe-title-row">
         <h2>{{ r.title || 'Untitled Recipe' }}</h2>
-        <button 
-          class="btn btn-save" 
-          (click)="onSaveRecipe()" 
-          [disabled]="saving || r.id || !currentUser"
-          *ngIf="!r.id && currentUser">
-          {{ saving ? 'Saving…' : '💾 Save Recipe' }}
-        </button>
-        <span class="saved-badge" *ngIf="r.id">✓ Saved</span>
-        <div *ngIf="!currentUser" class="login-prompt">
-          <a (click)="showLogin = true" style="cursor: pointer; color: #667eea;">Login to save recipes</a>
+        <div class="recipe-header-actions">
+          <button class="btn btn-small" (click)="exportRecipeToPdf()" title="Export to PDF">
+            📄 Export PDF
+          </button>
+          <button 
+            class="btn btn-save" 
+            (click)="onSaveRecipe()" 
+            [disabled]="saving || r.id || !currentUser"
+            *ngIf="!r.id && currentUser">
+            {{ saving ? 'Saving…' : '💾 Save Recipe' }}
+          </button>
+          <span class="saved-badge" *ngIf="r.id">✓ Saved</span>
+          <div *ngIf="!currentUser" class="login-prompt">
+            <a (click)="showLogin = true" style="cursor: pointer; color: #667eea;">Login to save recipes</a>
+          </div>
         </div>
       </div>
 
@@ -119,6 +130,15 @@
           </div>
         </div>
       </div>
+
+      <a
+        *ngIf="r.source_url"
+        [href]="r.source_url"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="recipe-source-link">
+        🔗 View original recipe
+      </a>
 
       <img
         *ngIf="r.image"
@@ -150,35 +170,131 @@
   <div *ngIf="activeTab === 'saved' && currentUser">
     <section class="card saved-recipes-list">
       <h2>📚 My Saved Recipes</h2>
+      <p class="menu-hint">Select recipes to add to a menu, then click "Create Menu" for a combined shopping list.</p>
       
       <div *ngIf="savedRecipes.length === 0" class="empty-state">
         <p>No saved recipes yet. Scrape and save a recipe to get started!</p>
       </div>
 
-      <div *ngIf="savedRecipes.length > 0" class="recipes-list">
-        <div 
-          class="recipe-list-item" 
-          *ngFor="let savedRecipe of savedRecipes"
-          (click)="onLoadRecipe(savedRecipe.id!)">
-          <div class="recipe-list-content">
-            <div class="recipe-list-image" *ngIf="savedRecipe.image">
-              <img [src]="savedRecipe.image" alt="Recipe" />
+      <div *ngIf="savedRecipes.length > 0">
+        <div class="menu-actions">
+          <button 
+            class="btn" 
+            [disabled]="selectedRecipeIds.size === 0"
+            (click)="createMenu()">
+            Create Menu ({{ selectedRecipeIds.size }} selected)
+          </button>
+        </div>
+        <div class="recipes-list">
+          <div 
+            class="recipe-list-item selectable" 
+            *ngFor="let savedRecipe of savedRecipes"
+            [class.selected]="isRecipeSelected(savedRecipe.id!)"
+            (click)="onLoadRecipe(savedRecipe.id!)">
+            <div class="recipe-list-content">
+              <label class="recipe-checkbox" (click)="$event.stopPropagation()">
+                <input 
+                  type="checkbox" 
+                  [checked]="isRecipeSelected(savedRecipe.id!)" 
+                  (click)="$event.stopPropagation(); toggleRecipeSelection(savedRecipe.id!)" />
+              </label>
+              <div class="recipe-list-image" *ngIf="savedRecipe.image">
+                <img [src]="savedRecipe.image" alt="Recipe" />
+              </div>
+              <div class="recipe-list-info">
+                <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
+                <div class="recipe-list-meta">
+                  <span *ngIf="savedRecipe.total_time">⏱️ {{ savedRecipe.total_time }}</span>
+                  <span *ngIf="savedRecipe.yields">🍽️ {{ savedRecipe.yields }}</span>
+                  <span *ngIf="savedRecipe.host">📍 {{ savedRecipe.host }}</span>
+                </div>
+              </div>
             </div>
-            <div class="recipe-list-info">
-              <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
-              <div class="recipe-list-meta">
-                <span *ngIf="savedRecipe.total_time">⏱️ {{ savedRecipe.total_time }}</span>
-                <span *ngIf="savedRecipe.yields">🍽️ {{ savedRecipe.yields }}</span>
-                <span *ngIf="savedRecipe.host">📍 {{ savedRecipe.host }}</span>
+            <button 
+              class="btn-delete-list" 
+              (click)="onDeleteRecipe(savedRecipe.id!); $event.stopPropagation()" 
+              title="Delete recipe">
+              ×
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Menu & Shopping List Tab -->
+  <div *ngIf="activeTab === 'menu' && currentUser">
+    <section class="card menu-card">
+      <h2>📋 Menu & Shopping List</h2>
+      
+      <div *ngIf="menuRecipes.length === 0" class="empty-state">
+        <p>No recipes in your menu. Go to My Recipes, select some recipes, and click "Create Menu".</p>
+        <button class="btn" (click)="setActiveTab('saved')">Choose Recipes</button>
+      </div>
+
+      <div *ngIf="menuRecipes.length > 0">
+        <div class="menu-actions">
+          <button class="btn btn-secondary" (click)="clearMenuSelection(); setActiveTab('saved')">Change selection</button>
+        </div>
+        <div class="menu-recipes-section">
+          <h3>Menu</h3>
+          <ul class="menu-recipes-list">
+            <li *ngFor="let r of menuRecipes">{{ r.title || 'Untitled Recipe' }}</li>
+          </ul>
+        </div>
+        <div class="shopping-list-section">
+          <div class="shopping-list-header">
+            <h3>🛒 Shopping List</h3>
+            <div class="shopping-list-actions">
+              <button 
+                class="btn btn-copy" 
+                (click)="copyShoppingList()"
+                [class.copied]="copyFeedback"
+                title="Copy list for notes">
+                {{ copyFeedback ? '✓ Copied!' : '📋 Copy for notes' }}
+              </button>
+              <div class="shopping-list-view-toggle">
+                <button 
+                  class="toggle-btn" 
+                  [class.active]="shoppingListView === 'combined'"
+                  (click)="shoppingListView = 'combined'">
+                  Combined
+                </button>
+                <button 
+                  class="toggle-btn" 
+                  [class.active]="shoppingListView === 'byRecipe'"
+                  (click)="shoppingListView = 'byRecipe'">
+                  By recipe
+                </button>
               </div>
             </div>
           </div>
-          <button 
-            class="btn-delete-list" 
-            (click)="onDeleteRecipe(savedRecipe.id!); $event.stopPropagation()" 
-            title="Delete recipe">
-            ×
-          </button>
+          <p class="shopping-list-intro" *ngIf="shoppingListView === 'combined'">
+            Ingredients merged by item across all recipes:
+          </p>
+          <p class="shopping-list-intro" *ngIf="shoppingListView === 'byRecipe'">
+            Ingredients listed under each recipe. Use "Copy for notes" to paste into your note app.
+          </p>
+
+          <!-- Combined view -->
+          <ul class="shopping-list" *ngIf="shoppingListView === 'combined'">
+            <li *ngFor="let item of combinedIngredients" class="shopping-list-item">
+              <span class="shopping-list-name">{{ item.name }}</span>
+              <span class="shopping-list-amounts">{{ item.amounts.join(' + ') }}</span>
+            </li>
+          </ul>
+
+          <!-- By-recipe view -->
+          <div class="shopping-list-by-recipe" *ngIf="shoppingListView === 'byRecipe'">
+            <div class="shopping-recipe-block" *ngFor="let r of menuRecipes">
+              <h4 class="shopping-recipe-title">{{ r.title || 'Untitled Recipe' }}</h4>
+              <ul class="shopping-list">
+                <li *ngFor="let ing of r.ingredients" class="shopping-list-item">
+                  <span class="shopping-list-ingredient-full">{{ ing }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </section>
