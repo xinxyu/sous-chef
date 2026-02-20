@@ -25,6 +25,31 @@ source ./venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Data storage (PostgreSQL)
+
+Recipes and users are stored in PostgreSQL:
+
+- **saved_recipes**: Option A schema (`user_id`, `recipe_id`, `saved_at`, `title`, `data` JSONB).
+- **users**: `id`, `username` (unique), `email`, `password_hash`, `created_at`.
+
+1. Create a database, then put your connection URL in a **`.env`** file in the project root (the app loads it with `python-dotenv`):
+   ```bash
+   cp .env.example .env
+   ```
+   In `.env`, set:
+   ```
+   DATABASE_URL=postgresql://user:password@localhost:5432/sous_chef
+   ```
+   Replace `user`, `password`, and `sous_chef` with your PostgreSQL username, password, and database name. Optionally set `SECRET_KEY` for production.
+
+2. (Optional) Migrate existing data from JSON files:
+   ```bash
+   python scripts/migrate_users_to_postgres.py    # users.json → users table
+   python scripts/migrate_recipes_to_postgres.py  # saved_recipes.json → saved_recipes table
+   ```
+
+3. Start the app; the `users` and `saved_recipes` tables are created automatically if they don’t exist.
+
 ### Running the App
 
 1. Start the Flask server:
@@ -34,8 +59,9 @@ python app.py
 
 2. Open your browser and navigate to:
 ```
-http://localhost:5000
+http://localhost:4100
 ```
+(The API runs on port 4100 so the Angular dev server can use 4200.)
 
 3. Enter a recipe URL in the input field and click "Scrape Recipe"
 

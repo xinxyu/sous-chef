@@ -1,0 +1,17 @@
+# Environment and secrets (do not commit)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+.eggs/
+
+# Local data (optional; remove if you want to track these)
+# saved_recipes.json
+# users.json

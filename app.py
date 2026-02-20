@@ -11,6 +11,13 @@ from datetime import datetime
 import uuid
 import hashlib
 from functools import wraps
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+from dotenv import load_dotenv
+
+# Load .env so DATABASE_URL, SECRET_KEY, etc. are available
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -18,9 +25,48 @@ CORS(app, supports_credentials=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Storage files
-RECIPES_FILE = 'saved_recipes.json'
-USERS_FILE = 'users.json'
+# Storage: PostgreSQL for recipes and users
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+
+def get_db_connection():
+    """Return a DB connection. Requires DATABASE_URL to be set."""
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL environment variable is required for recipe storage')
+    return psycopg.connect(DATABASE_URL)
+
+
+def init_db():
+    """Create saved_recipes and users tables if they do not exist."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS saved_recipes (
+                    user_id UUID NOT NULL,
+                    recipe_id UUID NOT NULL,
+                    saved_at TIMESTAMPTZ NOT NULL,
+                    title TEXT,
+                    data JSONB NOT NULL,
+                    PRIMARY KEY (user_id, recipe_id)
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_saved_recipes_user_saved_at
+                ON saved_recipes (user_id, saved_at DESC);
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id UUID PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL
+                );
+            """)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def fallback_parse_ingredients(url):
@@ -285,27 +331,52 @@ def scrape_recipe():
         return jsonify({'error': f'Failed to scrape recipe: {str(e)}'}), 500
 
 
-# User management functions
-def load_users():
-    """Load users from file."""
-    if os.path.exists(USERS_FILE):
-        try:
-            with open(USERS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading users: {e}")
-            return {}
-    return {}
-
-def save_users(users):
-    """Save users to file."""
+# User management (PostgreSQL)
+def db_get_user_by_username(username):
+    """Return user dict (id, username, email, password_hash, created_at) or None."""
+    conn = get_db_connection()
     try:
-        with open(USERS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(users, f, indent=2, ensure_ascii=False)
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT id, username, email, password_hash, created_at FROM users WHERE username = %s",
+                (username,),
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def db_get_user_by_id(user_id):
+    """Return user dict or None."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT id, username, email, password_hash, created_at FROM users WHERE id = %s",
+                (user_id,),
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def db_create_user(user_id, username, email, password_hash, created_at):
+    """Insert a new user. Raises on duplicate username."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO users (id, username, email, password_hash, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (user_id, username, email or None, password_hash, created_at),
+            )
+        conn.commit()
         return True
-    except Exception as e:
-        logger.error(f"Error saving users: {e}")
-        return False
+    finally:
+        conn.close()
+
 
 def hash_password(password):
     """Hash a password using SHA256."""
@@ -326,27 +397,96 @@ def require_auth(f):
     return decorated_function
 
 
-# Recipe storage functions (per-user)
-def load_recipes():
-    """Load saved recipes from file, organized by user."""
-    if os.path.exists(RECIPES_FILE):
-        try:
-            with open(RECIPES_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading recipes: {e}")
-            return {}
-    return {}
-
-def save_recipes(recipes):
-    """Save recipes to file."""
+# Recipe storage (PostgreSQL Option A: user_id, recipe_id, saved_at, title columns + data JSONB)
+def db_get_recipes_for_user(user_id):
+    """Return list of recipe dicts for user, sorted by saved_at desc."""
+    conn = get_db_connection()
     try:
-        with open(RECIPES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(recipes, f, indent=2, ensure_ascii=False)
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT recipe_id, saved_at, title, data FROM saved_recipes WHERE user_id = %s ORDER BY saved_at DESC",
+                (user_id,),
+            )
+            rows = cur.fetchall()
+        out = []
+        for row in rows:
+            recipe = dict(row["data"])
+            recipe["id"] = str(row["recipe_id"])
+            recipe["user_id"] = user_id
+            recipe["saved_at"] = row["saved_at"].isoformat() if hasattr(row["saved_at"], "isoformat") else row["saved_at"]
+            if row.get("title") is not None:
+                recipe["title"] = row["title"]
+            out.append(recipe)
+        return out
+    finally:
+        conn.close()
+
+
+def db_get_recipe(user_id, recipe_id):
+    """Return one recipe dict or None."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT recipe_id, saved_at, title, data FROM saved_recipes WHERE user_id = %s AND recipe_id = %s",
+                (user_id, recipe_id),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        recipe = dict(row["data"])
+        recipe["id"] = str(row["recipe_id"])
+        recipe["user_id"] = user_id
+        recipe["saved_at"] = row["saved_at"].isoformat() if hasattr(row["saved_at"], "isoformat") else row["saved_at"]
+        if row.get("title") is not None:
+            recipe["title"] = row["title"]
+        return recipe
+    finally:
+        conn.close()
+
+
+def db_save_recipe(user_id, recipe_id, recipe_data):
+    """Insert or update one recipe. recipe_data is the full recipe dict (stored in data JSONB)."""
+    saved_at = recipe_data.get("saved_at")
+    if isinstance(saved_at, str):
+        try:
+            saved_at = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+        except ValueError:
+            saved_at = datetime.now()
+    elif saved_at is None:
+        saved_at = datetime.now()
+    title = recipe_data.get("title")
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO saved_recipes (user_id, recipe_id, saved_at, title, data)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, recipe_id)
+                DO UPDATE SET saved_at = EXCLUDED.saved_at, title = EXCLUDED.title, data = EXCLUDED.data
+                """,
+                (user_id, recipe_id, saved_at, title, Jsonb(recipe_data)),
+            )
+        conn.commit()
         return True
-    except Exception as e:
-        logger.error(f"Error saving recipes: {e}")
-        return False
+    finally:
+        conn.close()
+
+
+def db_delete_recipe(user_id, recipe_id):
+    """Delete one recipe. Returns True if a row was deleted."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "DELETE FROM saved_recipes WHERE user_id = %s AND recipe_id = %s",
+                (user_id, recipe_id),
+            )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
 
 
 # Authentication endpoints
@@ -368,37 +508,31 @@ def register():
         if len(password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
         
-        users = load_users()
-        
-        # Check if username already exists
-        if username in users:
+        if db_get_user_by_username(username):
             return jsonify({'error': 'Username already exists'}), 400
         
-        # Create new user
         user_id = str(uuid.uuid4())
-        users[username] = {
-            'id': user_id,
-            'username': username,
-            'email': email,
-            'password_hash': hash_password(password),
-            'created_at': datetime.now().isoformat(),
-        }
-        
-        if save_users(users):
-            # Auto-login after registration
-            session['user_id'] = user_id
-            session['username'] = username
-            logger.info(f"Registered new user: {username}")
-            return jsonify({
-                'message': 'User registered successfully',
-                'user': {
-                    'id': user_id,
-                    'username': username,
-                    'email': email,
-                }
-            }), 201
-        else:
+        created_at = datetime.now()
+        password_hash = hash_password(password)
+        try:
+            db_create_user(user_id, username, email, password_hash, created_at)
+        except Exception as e:
+            if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+                return jsonify({'error': 'Username already exists'}), 400
+            logger.error(f"Failed to create user: {e}")
             return jsonify({'error': 'Failed to save user'}), 500
+        
+        session['user_id'] = user_id
+        session['username'] = username
+        logger.info(f"Registered new user: {username}")
+        return jsonify({
+            'message': 'User registered successfully',
+            'user': {
+                'id': user_id,
+                'username': username,
+                'email': email,
+            }
+        }), 201
             
     except Exception as e:
         logger.error(f"Error registering user: {str(e)}")
@@ -416,27 +550,24 @@ def login():
         if not username or not password:
             return jsonify({'error': 'Username and password are required'}), 400
         
-        users = load_users()
-        
-        if username not in users:
+        user = db_get_user_by_username(username)
+        if not user:
             return jsonify({'error': 'Invalid username or password'}), 401
         
-        user = users[username]
         password_hash = hash_password(password)
-        
         if user['password_hash'] != password_hash:
             return jsonify({'error': 'Invalid username or password'}), 401
         
         # Set session
-        session['user_id'] = user['id']
-        session['username'] = username
+        session['user_id'] = str(user['id'])
+        session['username'] = user['username']
         
         logger.info(f"User logged in: {username}")
         return jsonify({
             'message': 'Login successful',
             'user': {
-                'id': user['id'],
-                'username': username,
+                'id': str(user['id']),
+                'username': user['username'],
                 'email': user.get('email'),
             }
         }), 200
@@ -460,15 +591,12 @@ def get_current_user():
     if not user_id:
         return jsonify({'user': None}), 200
     
-    users = load_users()
-    username = session.get('username')
-    
-    if username and username in users:
-        user = users[username]
+    user = db_get_user_by_id(user_id)
+    if user:
         return jsonify({
             'user': {
-                'id': user['id'],
-                'username': username,
+                'id': str(user['id']),
+                'username': user['username'],
                 'email': user.get('email'),
             }
         }), 200
@@ -491,7 +619,7 @@ def save_recipe():
         # Generate unique ID if not provided
         recipe_id = data.get('id') or str(uuid.uuid4())
         
-        # Add timestamp and user_id
+        # Full recipe payload (stored in data JSONB; saved_at/title also in columns for Option A)
         recipe_data = {
             'id': recipe_id,
             'user_id': user_id,
@@ -507,20 +635,9 @@ def save_recipe():
             'saved_at': datetime.now().isoformat(),
         }
         
-        recipes = load_recipes()
-        
-        # Initialize user's recipe list if needed
-        if user_id not in recipes:
-            recipes[user_id] = {}
-        
-        recipes[user_id][recipe_id] = recipe_data
-        
-        if save_recipes(recipes):
-            logger.info(f"Saved recipe {recipe_id} for user {user_id}")
-            return jsonify(recipe_data), 201
-        else:
-            return jsonify({'error': 'Failed to save recipe'}), 500
-            
+        db_save_recipe(user_id, recipe_id, recipe_data)
+        logger.info(f"Saved recipe {recipe_id} for user {user_id}")
+        return jsonify(recipe_data), 201
     except Exception as e:
         logger.error(f"Error saving recipe: {str(e)}")
         return jsonify({'error': f'Failed to save recipe: {str(e)}'}), 500
@@ -529,17 +646,10 @@ def save_recipe():
 @app.route('/recipes', methods=['GET'])
 @require_auth
 def list_recipes():
-    """Get all saved recipes for the current user."""
+    """Get all saved recipes for the current user (sorted by saved_at desc)."""
     try:
         user_id = get_current_user_id()
-        recipes = load_recipes()
-        
-        # Get recipes for current user
-        user_recipes = recipes.get(user_id, {})
-        
-        # Return as list sorted by saved_at (most recent first)
-        recipe_list = list(user_recipes.values())
-        recipe_list.sort(key=lambda x: x.get('saved_at', ''), reverse=True)
+        recipe_list = db_get_recipes_for_user(user_id)
         return jsonify(recipe_list), 200
     except Exception as e:
         logger.error(f"Error listing recipes: {str(e)}")
@@ -552,13 +662,10 @@ def get_recipe(recipe_id):
     """Get a specific recipe by ID (only if it belongs to the current user)."""
     try:
         user_id = get_current_user_id()
-        recipes = load_recipes()
-        
-        user_recipes = recipes.get(user_id, {})
-        if recipe_id in user_recipes:
-            return jsonify(user_recipes[recipe_id]), 200
-        else:
-            return jsonify({'error': 'Recipe not found'}), 404
+        recipe = db_get_recipe(user_id, recipe_id)
+        if recipe:
+            return jsonify(recipe), 200
+        return jsonify({'error': 'Recipe not found'}), 404
     except Exception as e:
         logger.error(f"Error getting recipe: {str(e)}")
         return jsonify({'error': f'Failed to get recipe: {str(e)}'}), 500
@@ -570,21 +677,24 @@ def delete_recipe(recipe_id):
     """Delete a recipe by ID (only if it belongs to the current user)."""
     try:
         user_id = get_current_user_id()
-        recipes = load_recipes()
-        
-        if user_id in recipes and recipe_id in recipes[user_id]:
-            del recipes[user_id][recipe_id]
-            if save_recipes(recipes):
-                logger.info(f"Deleted recipe {recipe_id} for user {user_id}")
-                return jsonify({'message': 'Recipe deleted successfully'}), 200
-            else:
-                return jsonify({'error': 'Failed to save after deletion'}), 500
-        else:
+        existing = db_get_recipe(user_id, recipe_id)
+        if not existing:
             return jsonify({'error': 'Recipe not found'}), 404
+        db_delete_recipe(user_id, recipe_id)
+        logger.info(f"Deleted recipe {recipe_id} for user {user_id}")
+        return jsonify({'message': 'Recipe deleted successfully'}), 200
     except Exception as e:
         logger.error(f"Error deleting recipe: {str(e)}")
         return jsonify({'error': f'Failed to delete recipe: {str(e)}'}), 500
 
+
+# Ensure table exists when app loads (for both dev server and gunicorn)
+if DATABASE_URL:
+    try:
+        init_db()
+        logger.info("PostgreSQL saved_recipes table ready")
+    except Exception as e:
+        logger.warning("PostgreSQL init_db failed (table may already exist): %s", e)
 
 if __name__ == '__main__':
     # Run API backend on 4100 so an Angular dev server can use 4200
