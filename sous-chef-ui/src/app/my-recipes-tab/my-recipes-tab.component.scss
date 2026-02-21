@@ -96,6 +96,42 @@
   }
 }
 
+// Mobile: allow title to wrap so more words are readable (no overlap)
+@media (max-width: 600px) {
+  .recipe-list-item {
+    padding: 12px;
+    align-items: flex-start;
+  }
+  .recipe-list-content {
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .recipe-list-image {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+  }
+  .recipe-list-info {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .recipe-list-info h3 {
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    line-clamp: 3;
+    line-height: 1.35;
+  }
+  .recipe-list-meta {
+    gap: 10px;
+    font-size: 0.85em;
+  }
+}
+
 .recipe-list-meta {
   display: flex;
   gap: 15px;
