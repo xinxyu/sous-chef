@@ -1,6 +1,6 @@
 {
   "buildCommand": "ng build --configuration production",
-  "outputDirectory": "dist/sous-chef-ui",
+  "outputDirectory": "dist/sous-chef-ui/browser",
     "rewrites": [
       { 
         "source": "/(.*)", 
