@@ -22,11 +22,13 @@ body {
 
 .input-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 20px;
 
   input {
     flex: 1;
+    min-width: 0;
     padding: 15px;
     border: 2px solid #e0e0e0;
     border-radius: 8px;
@@ -36,6 +38,15 @@ body {
     &:focus {
       outline: none;
       border-color: #667eea;
+    }
+  }
+
+  @media (max-width: 480px) {
+    input {
+      flex: 1 1 100%;
+    }
+    .btn {
+      flex: 1 1 100%;
     }
   }
 }

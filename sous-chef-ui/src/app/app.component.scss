@@ -40,6 +40,15 @@
   gap: 10px;
 }
 
+@media (max-width: 600px) {
+  .header-top {
+    width: 100%;
+  }
+  .auth-section {
+    margin-left: auto;
+  }
+}
+
 .user-info {
   display: flex;
   align-items: center;
