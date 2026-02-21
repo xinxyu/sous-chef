@@ -76,6 +76,15 @@ When the Angular app is deployed on one host (e.g. Vercel) and the Python API on
 3. **Sessions / cookies**  
    The app uses cookie-based sessions (`withCredentials: true`). If the frontend and API are on different domains, ensure the backend sets cookies with `SameSite=None; Secure` and that the frontend is served over HTTPS so cookies are sent. Flask’s default session cookie may need tuning for cross-origin (e.g. `SESSION_COOKIE_SAMESITE`, `SESSION_COOKIE_SECURE`) in production.
 
+### Email verification and password reset
+
+- **Register** requires an email; new users get a verification link by email and cannot log in until they verify.
+- **Verify email:** `GET /auth/verify-email?token=...` or `POST /auth/verify-email` with `{"token": "..."}`.
+- **Forgot password:** `POST /auth/forgot-password` with `{"email": "..."}` sends a reset link.
+- **Reset password:** `POST /auth/reset-password` with `{"token": "...", "new_password": "..."}` (or `password`).
+
+Set **APP_BASE_URL** (or **FRONTEND_ORIGIN**) so verification and reset links point to your frontend (e.g. `https://your-app.vercel.app`). Set **RESEND_API_KEY** and **FROM_EMAIL** (e.g. `Sous Chef <onboarding@resend.dev>` for testing, or your verified domain) to send emails via [Resend](https://resend.com). Without Resend, registration and forgot-password still succeed but no email is sent (link is only logged).
+
 ### Running the App
 
 1. Start the Flask server:

@@ -45,7 +45,7 @@ def main():
         except (ValueError, TypeError):
             created_at = datetime.now()
         try:
-            db_create_user(user_id, username, email, password_hash, created_at)
+            db_create_user(user_id, username, email, password_hash, created_at, email_verified=True)
             count += 1
         except Exception as e:
             if "unique" in str(e).lower() or "duplicate" in str(e).lower():

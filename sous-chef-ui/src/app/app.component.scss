@@ -140,6 +140,35 @@
   }
 }
 
+.modal .error {
+  color: #c62828;
+  font-size: 14px;
+  margin: 0;
+}
+.modal .success {
+  color: #2e7d32;
+  font-size: 14px;
+  margin: 0;
+}
+.forgot-link {
+  color: #667eea;
+  cursor: pointer;
+  font-size: 14px;
+  margin: -8px 0 0;
+  text-decoration: none;
+}
+.forgot-link:hover {
+  text-decoration: underline;
+}
+.modal-hint {
+  color: #666;
+  font-size: 14px;
+  margin: -10px 0 10px;
+  &.error {
+    color: #c62828;
+  }
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;

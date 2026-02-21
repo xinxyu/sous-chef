@@ -43,8 +43,12 @@
         <form (ngSubmit)="onLogin()">
           <input type="text" [(ngModel)]="loginUsername" name="loginUsername" placeholder="Username" required />
           <input type="password" [(ngModel)]="loginPassword" name="loginPassword" placeholder="Password" required />
+          <a class="forgot-link" (click)="openForgotPassword()">Forgot password?</a>
           @if (authError()) {
             <div class="error">{{ authError() }}</div>
+          }
+          @if (authSuccess()) {
+            <div class="success">{{ authSuccess() }}</div>
           }
           <div class="modal-actions">
             <button type="submit" class="btn" [disabled]="authLoading()">Login</button>
@@ -62,14 +66,76 @@
         <h2>Register</h2>
         <form (ngSubmit)="onRegister()">
           <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
-          <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (optional)" />
+          <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (required)" required />
           <input type="password" [(ngModel)]="registerPassword" name="registerPassword" placeholder="Password" required />
           @if (authError()) {
             <div class="error">{{ authError() }}</div>
           }
+          @if (authSuccess()) {
+            <div class="success">{{ authSuccess() }}</div>
+          }
           <div class="modal-actions">
             <button type="submit" class="btn" [disabled]="authLoading()">Register</button>
             <button type="button" class="btn btn-secondary" (click)="showRegister.set(false)">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Forgot Password Modal -->
+  @if (showForgotPassword()) {
+    <div class="modal-overlay" (click)="showForgotPassword.set(false)">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h2>Forgot password</h2>
+        <p class="modal-hint">Enter your email and we’ll send you a link to reset your password.</p>
+        <form (ngSubmit)="onForgotPassword()">
+          <input type="email" [(ngModel)]="forgotEmail" name="forgotEmail" placeholder="Email" required />
+          @if (authError()) {
+            <div class="error">{{ authError() }}</div>
+          }
+          @if (authSuccess()) {
+            <div class="success">{{ authSuccess() }}</div>
+          }
+          <div class="modal-actions">
+            <button type="submit" class="btn" [disabled]="authLoading()">Send reset link</button>
+            <button type="button" class="btn btn-secondary" (click)="closeForgotPassword()">Back to login</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Verify Email Result Modal (after clicking link in email) -->
+  @if (showVerifyEmailResult()) {
+    <div class="modal-overlay" (click)="closeVerifyEmailResult()">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h2>{{ showVerifyEmailResult() === 'success' ? 'Email verified' : 'Verification failed' }}</h2>
+        <p class="modal-hint" [class.error]="showVerifyEmailResult() === 'error'">{{ verifyEmailMessage() }}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn" (click)="closeVerifyEmailResult()">Log in</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Reset Password Modal -->
+  @if (showResetPassword()) {
+    <div class="modal-overlay" (click)="showResetPassword.set(false)">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <h2>Reset password</h2>
+        <form (ngSubmit)="onResetPassword()">
+          <input type="password" [(ngModel)]="resetNewPassword" name="resetNewPassword" placeholder="New password" required minlength="6" />
+          <input type="password" [(ngModel)]="resetConfirmPassword" name="resetConfirmPassword" placeholder="Confirm new password" required minlength="6" />
+          @if (authError()) {
+            <div class="error">{{ authError() }}</div>
+          }
+          @if (authSuccess()) {
+            <div class="success">{{ authSuccess() }}</div>
+          }
+          <div class="modal-actions">
+            <button type="submit" class="btn" [disabled]="authLoading()">Update password</button>
+            <button type="button" class="btn btn-secondary" (click)="showResetPassword.set(false); showLogin.set(true)">Cancel</button>
           </div>
         </form>
       </div>

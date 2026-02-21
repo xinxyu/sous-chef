@@ -1,4 +1,4 @@
-import { Component, effect, signal, computed } from '@angular/core';
+import { Component, effect, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RecipeService, Recipe } from './recipe.service';
 import { AuthService, User } from './auth.service';
@@ -18,7 +18,7 @@ import { MenuListTabComponent } from './menu-list-tab/menu-list-tab.component';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   readonly title = 'Sous Chef';
 
   readonly recipe = signal<Recipe | null>(null);
@@ -30,7 +30,12 @@ export class AppComponent {
 
   readonly showLogin = signal(false);
   readonly showRegister = signal(false);
+  readonly showForgotPassword = signal(false);
+  readonly showResetPassword = signal(false);
+  readonly showVerifyEmailResult = signal<'success' | 'error' | null>(null);
+  readonly verifyEmailMessage = signal<string>('');
   readonly authError = signal<string | null>(null);
+  readonly authSuccess = signal<string | null>(null);
   readonly authLoading = signal(false);
 
   loginUsername = '';
@@ -38,6 +43,10 @@ export class AppComponent {
   registerUsername = '';
   registerEmail = '';
   registerPassword = '';
+  forgotEmail = '';
+  resetPasswordToken = '';
+  resetNewPassword = '';
+  resetConfirmPassword = '';
 
   constructor(
     private recipeService: RecipeService,
@@ -57,6 +66,43 @@ export class AppComponent {
         this.loadSavedRecipes();
       }
     });
+  }
+
+  ngOnInit(): void {
+    if (typeof window === 'undefined') return;
+    const pathname = window.location.pathname || '';
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return;
+    const cleanUrl = (): void => window.history.replaceState({}, '', '/');
+
+    if (pathname.includes('verify-email')) {
+      cleanUrl();
+      this.authService.verifyEmail(token).subscribe({
+        next: (res) => {
+          this.verifyEmailMessage.set(res.message || 'Email verified. You can now log in.');
+          this.showVerifyEmailResult.set('success');
+        },
+        error: (err) => {
+          this.verifyEmailMessage.set(err?.error?.error || 'Invalid or expired verification link.');
+          this.showVerifyEmailResult.set('error');
+        },
+      });
+    } else if (pathname.includes('reset-password')) {
+      this.resetPasswordToken = token;
+      this.showResetPassword.set(true);
+      cleanUrl();
+    } else {
+      this.resetPasswordToken = token;
+      this.showResetPassword.set(true);
+      cleanUrl();
+    }
+  }
+
+  closeVerifyEmailResult(): void {
+    this.showVerifyEmailResult.set(null);
+    this.verifyEmailMessage.set('');
+    this.showLogin.set(true);
   }
 
   setActiveTab(tab: 'scrape' | 'saved' | 'menu'): void {
@@ -166,22 +212,101 @@ export class AppComponent {
 
   onRegister(): void {
     this.authError.set(null);
+    this.authSuccess.set(null);
     this.authLoading.set(true);
     this.authService
       .register(this.registerUsername, this.registerPassword, this.registerEmail || undefined)
       .subscribe({
-        next: () => {
+        next: (res: { message?: string; user?: User }) => {
           this.authLoading.set(false);
-          this.showRegister.set(false);
-          this.registerUsername = '';
-          this.registerEmail = '';
-          this.registerPassword = '';
+          if (res.user) {
+            this.showRegister.set(false);
+            this.registerUsername = '';
+            this.registerEmail = '';
+            this.registerPassword = '';
+          } else {
+            this.authSuccess.set(res.message || 'Please check your email to verify your account.');
+            this.registerUsername = '';
+            this.registerEmail = '';
+            this.registerPassword = '';
+          }
         },
         error: (err) => {
           this.authLoading.set(false);
           this.authError.set(err?.error?.error || 'Registration failed');
         },
       });
+  }
+
+  onForgotPassword(): void {
+    this.authError.set(null);
+    this.authSuccess.set(null);
+    if (!this.forgotEmail.trim()) {
+      this.authError.set('Please enter your email.');
+      return;
+    }
+    this.authLoading.set(true);
+    this.authService.forgotPassword(this.forgotEmail.trim()).subscribe({
+      next: (res) => {
+        this.authLoading.set(false);
+        this.authSuccess.set(res.message || 'If an account exists with this email, you will receive a reset link.');
+      },
+      error: (err) => {
+        this.authLoading.set(false);
+        this.authError.set(err?.error?.error || 'Request failed');
+      },
+    });
+  }
+
+  onResetPassword(): void {
+    this.authError.set(null);
+    this.authSuccess.set(null);
+    if (!this.resetNewPassword || this.resetNewPassword.length < 6) {
+      this.authError.set('Password must be at least 6 characters.');
+      return;
+    }
+    if (this.resetNewPassword !== this.resetConfirmPassword) {
+      this.authError.set('Passwords do not match.');
+      return;
+    }
+    const token = this.resetPasswordToken || new URLSearchParams(window.location.search).get('token');
+    if (!token) {
+      this.authError.set('Invalid or missing reset link.');
+      return;
+    }
+    this.authLoading.set(true);
+    this.authService.resetPassword(token, this.resetNewPassword).subscribe({
+      next: (res) => {
+        this.authLoading.set(false);
+        this.authSuccess.set(res.message || 'Password updated. You can now log in.');
+        this.resetPasswordToken = '';
+        this.resetNewPassword = '';
+        this.resetConfirmPassword = '';
+        setTimeout(() => {
+          this.showResetPassword.set(false);
+          this.showLogin.set(true);
+          this.authSuccess.set(null);
+        }, 2500);
+      },
+      error: (err) => {
+        this.authLoading.set(false);
+        this.authError.set(err?.error?.error || 'Failed to reset password');
+      },
+    });
+  }
+
+  openForgotPassword(): void {
+    this.authError.set(null);
+    this.authSuccess.set(null);
+    this.showLogin.set(false);
+    this.showForgotPassword.set(true);
+  }
+
+  closeForgotPassword(): void {
+    this.authError.set(null);
+    this.authSuccess.set(null);
+    this.showForgotPassword.set(false);
+    this.showLogin.set(true);
   }
 
   onLogout(): void {

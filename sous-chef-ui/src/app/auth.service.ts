@@ -62,6 +62,29 @@ export class AuthService {
     );
   }
 
+  verifyEmail(token: string): Observable<{ message?: string }> {
+    return this.http.get<{ message?: string }>(
+      `${this.apiUrl}/auth/verify-email?token=${encodeURIComponent(token)}`,
+      { withCredentials: true }
+    );
+  }
+
+  forgotPassword(email: string): Observable<{ message?: string }> {
+    return this.http.post<{ message?: string }>(
+      `${this.apiUrl}/auth/forgot-password`,
+      { email },
+      { withCredentials: true }
+    );
+  }
+
+  resetPassword(token: string, newPassword: string): Observable<{ message?: string }> {
+    return this.http.post<{ message?: string }>(
+      `${this.apiUrl}/auth/reset-password`,
+      { token, new_password: newPassword },
+      { withCredentials: true }
+    );
+  }
+
   getCurrentUser(): User | null {
     return this.currentUserSignal();
   }

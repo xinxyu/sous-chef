@@ -8,10 +8,12 @@ import re
 import json
 import os
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import hashlib
+import secrets
 from functools import wraps
+import resend
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -26,7 +28,11 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 # CORS: allow frontend origin when set (required when frontend and backend are on different domains)
 _cors_origins = os.environ.get('CORS_ORIGINS', os.environ.get('FRONTEND_ORIGIN', ''))
 _origins_list = [o.strip() for o in _cors_origins.split(',') if o.strip()]
+# When production origin(s) are set, also allow local Angular dev server for local development
 if _origins_list:
+    for origin in ('http://localhost:4200', 'http://127.0.0.1:4200'):
+        if origin not in _origins_list:
+            _origins_list.append(origin)
     CORS(app, supports_credentials=True, origins=_origins_list)
     # So cookies are sent cross-origin (frontend on different domain)
     app.config['SESSION_COOKIE_SAMESITE'] = 'None'
@@ -72,7 +78,34 @@ def init_db():
                     username TEXT UNIQUE NOT NULL,
                     email TEXT,
                     password_hash TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL
+                    created_at TIMESTAMPTZ NOT NULL,
+                    email_verified BOOLEAN NOT NULL DEFAULT FALSE
+                );
+            """)
+            # Add email_verified for existing DBs that had users table without it
+            cur.execute("""
+                DO $$
+                BEGIN
+                  IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'email_verified'
+                  ) THEN
+                    ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT TRUE;
+                  END IF;
+                END $$;
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                    token TEXT PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    expires_at TIMESTAMPTZ NOT NULL
+                );
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    token TEXT PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    expires_at TIMESTAMPTZ NOT NULL
                 );
             """)
         conn.commit()
@@ -366,7 +399,7 @@ def db_get_user_by_username(username):
     try:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                "SELECT id, username, email, password_hash, created_at FROM users WHERE username = %s",
+                "SELECT id, username, email, password_hash, created_at, email_verified FROM users WHERE username = %s",
                 (username,),
             )
             return cur.fetchone()
@@ -380,7 +413,7 @@ def db_get_user_by_id(user_id):
     try:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                "SELECT id, username, email, password_hash, created_at FROM users WHERE id = %s",
+                "SELECT id, username, email, password_hash, created_at, email_verified FROM users WHERE id = %s",
                 (user_id,),
             )
             return cur.fetchone()
@@ -388,22 +421,165 @@ def db_get_user_by_id(user_id):
         conn.close()
 
 
-def db_create_user(user_id, username, email, password_hash, created_at):
+def db_get_user_by_email(email):
+    """Return user dict or None. Email match is case-insensitive."""
+    if not email or not email.strip():
+        return None
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT id, username, email, password_hash, created_at, email_verified FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(%s))",
+                (email,),
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def db_create_user(user_id, username, email, password_hash, created_at, email_verified=False):
     """Insert a new user. Raises on duplicate username."""
     conn = get_db_connection()
     try:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO users (id, username, email, password_hash, created_at)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO users (id, username, email, password_hash, created_at, email_verified)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (user_id, username, email or None, password_hash, created_at),
+                (user_id, username, email or None, password_hash, created_at, email_verified),
             )
         conn.commit()
         return True
     finally:
         conn.close()
+
+
+def db_set_user_email_verified(user_id, verified=True):
+    """Set email_verified for a user."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET email_verified = %s WHERE id = %s", (verified, user_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def db_create_verification_token(user_id, expires_in_hours=24):
+    """Create a verification token; returns (token, expires_at)."""
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now() + __timedelta_hours(expires_in_hours)
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES (%s, %s, %s)",
+                (token, user_id, expires_at),
+            )
+        conn.commit()
+        return token, expires_at
+    finally:
+        conn.close()
+
+
+def db_consume_verification_token(token):
+    """If token is valid, return user_id and delete token; else return None."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT user_id FROM email_verification_tokens WHERE token = %s AND expires_at > NOW()",
+                (token,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        user_id = row["user_id"]
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM email_verification_tokens WHERE token = %s", (token,))
+        conn.commit()
+        return user_id
+    finally:
+        conn.close()
+
+
+def db_create_password_reset_token(user_id, expires_in_hours=1):
+    """Create a password reset token; returns (token, expires_at)."""
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now() + __timedelta_hours(expires_in_hours)
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (%s, %s, %s)",
+                (token, user_id, expires_at),
+            )
+        conn.commit()
+        return token, expires_at
+    finally:
+        conn.close()
+
+
+def db_consume_password_reset_token(token):
+    """If token is valid, return user_id and delete token; else return None."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT user_id FROM password_reset_tokens WHERE token = %s AND expires_at > NOW()",
+                (token,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        user_id = row["user_id"]
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM password_reset_tokens WHERE token = %s", (token,))
+        conn.commit()
+        return user_id
+    finally:
+        conn.close()
+
+
+def db_update_password(user_id, new_password_hash):
+    """Update a user's password."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_password_hash, user_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def __timedelta_hours(hours):
+    return timedelta(hours=hours)
+
+
+def send_email(to_email, subject, body_text, body_html=None):
+    """Send an email via Resend. Requires RESEND_API_KEY and FROM_EMAIL (e.g. 'Sous Chef <onboarding@resend.dev>')."""
+    api_key = os.environ.get('RESEND_API_KEY')
+    from_email = os.environ.get('FROM_EMAIL', 'Sous Chef <onboarding@resend.dev>')
+    if not api_key:
+        logger.warning("RESEND_API_KEY not set; skipping send_email.")
+        return False
+    try:
+        resend.api_key = api_key
+        params = {
+            "from": from_email,
+            "to": [to_email],
+            "subject": subject,
+            "text": body_text,
+        }
+        if body_html:
+            params["html"] = body_html
+        resend.Emails.send(params)
+        logger.info(f"Email sent to {to_email} ({subject})")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return False
 
 
 def hash_password(password):
@@ -520,48 +696,51 @@ def db_delete_recipe(user_id, recipe_id):
 # Authentication endpoints
 @app.route('/auth/register', methods=['POST'])
 def register():
-    """Register a new user."""
+    """Register a new user. Requires email verification before login."""
     try:
         data = request.get_json()
         username = data.get('username', '').strip()
         password = data.get('password', '').strip()
-        email = data.get('email', '').strip()
+        email = (data.get('email') or '').strip()
         
         if not username or not password:
             return jsonify({'error': 'Username and password are required'}), 400
-        
+        if not email:
+            return jsonify({'error': 'Email is required for registration'}), 400
         if len(username) < 3:
             return jsonify({'error': 'Username must be at least 3 characters'}), 400
-        
         if len(password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
         
         if db_get_user_by_username(username):
             return jsonify({'error': 'Username already exists'}), 400
+        if db_get_user_by_email(email):
+            return jsonify({'error': 'An account with this email already exists'}), 400
         
         user_id = str(uuid.uuid4())
         created_at = datetime.now()
         password_hash = hash_password(password)
         try:
-            db_create_user(user_id, username, email, password_hash, created_at)
+            db_create_user(user_id, username, email, password_hash, created_at, email_verified=False)
         except Exception as e:
             if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
                 return jsonify({'error': 'Username already exists'}), 400
             logger.error(f"Failed to create user: {e}")
             return jsonify({'error': 'Failed to save user'}), 500
         
-        session['user_id'] = user_id
-        session['username'] = username
-        logger.info(f"Registered new user: {username}")
+        # Create verification token and send email
+        token, _ = db_create_verification_token(user_id, expires_in_hours=24)
+        base_url = (os.environ.get('APP_BASE_URL') or os.environ.get('FRONTEND_ORIGIN') or 'http://localhost:4200').rstrip('/')
+        verify_url = f"{base_url}/verify-email?token={token}"
+        body_text = f"Hi {username},\n\nPlease verify your email by opening this link:\n{verify_url}\n\nThe link expires in 24 hours."
+        body_html = f"<p>Hi {username},</p><p>Please <a href=\"{verify_url}\">verify your email</a>.</p><p>The link expires in 24 hours.</p>"
+        send_email(email, "Verify your email - Sous Chef", body_text, body_html)
+        
+        logger.info(f"Registered new user: {username} (pending verification)")
         return jsonify({
-            'message': 'User registered successfully',
-            'user': {
-                'id': user_id,
-                'username': username,
-                'email': email,
-            }
+            'message': 'Registration successful. Please check your email to verify your account before logging in.',
+            'email_sent': True,
         }), 201
-            
     except Exception as e:
         logger.error(f"Error registering user: {str(e)}")
         return jsonify({'error': f'Failed to register user: {str(e)}'}), 500
@@ -569,7 +748,7 @@ def register():
 
 @app.route('/auth/login', methods=['POST'])
 def login():
-    """Login a user."""
+    """Login a user. Rejects unverified accounts."""
     try:
         data = request.get_json()
         username = data.get('username', '').strip()
@@ -582,11 +761,13 @@ def login():
         if not user:
             return jsonify({'error': 'Invalid username or password'}), 401
         
+        if not user.get('email_verified', True):
+            return jsonify({'error': 'Please verify your email before logging in. Check your inbox for the verification link.'}), 403
+        
         password_hash = hash_password(password)
         if user['password_hash'] != password_hash:
             return jsonify({'error': 'Invalid username or password'}), 401
         
-        # Set session
         session['user_id'] = str(user['id'])
         session['username'] = user['username']
         
@@ -599,7 +780,6 @@ def login():
                 'email': user.get('email'),
             }
         }), 200
-            
     except Exception as e:
         logger.error(f"Error logging in: {str(e)}")
         return jsonify({'error': f'Failed to login: {str(e)}'}), 500
@@ -610,6 +790,57 @@ def logout():
     """Logout the current user."""
     session.clear()
     return jsonify({'message': 'Logout successful'}), 200
+
+
+@app.route('/auth/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    """Verify email using token from link. GET ?token=... or POST {"token": "..."}."""
+    token = request.args.get('token') or (request.get_json() or {}).get('token')
+    if not token:
+        return jsonify({'error': 'Verification token is required'}), 400
+    user_id = db_consume_verification_token(token)
+    if not user_id:
+        return jsonify({'error': 'Invalid or expired verification link. You may request a new one by registering again.'}), 400
+    db_set_user_email_verified(user_id, True)
+    logger.info(f"Email verified for user_id={user_id}")
+    return jsonify({'message': 'Email verified. You can now log in.'}), 200
+
+
+@app.route('/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    """Send a password reset link to the given email."""
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip()
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    user = db_get_user_by_email(email)
+    if not user:
+        return jsonify({'message': 'If an account exists with this email, you will receive a reset link.'}), 200
+    token, _ = db_create_password_reset_token(user['id'], expires_in_hours=1)
+    base_url = (os.environ.get('APP_BASE_URL') or os.environ.get('FRONTEND_ORIGIN') or 'http://localhost:4200').rstrip('/')
+    reset_url = f"{base_url}/reset-password?token={token}"
+    body_text = f"Hi {user['username']},\n\nReset your password by opening this link:\n{reset_url}\n\nThe link expires in 1 hour."
+    body_html = f"<p>Hi {user['username']},</p><p><a href=\"{reset_url}\">Reset your password</a>.</p><p>The link expires in 1 hour.</p>"
+    send_email(email, "Reset your password - Sous Chef", body_text, body_html)
+    return jsonify({'message': 'If an account exists with this email, you will receive a reset link.'}), 200
+
+
+@app.route('/auth/reset-password', methods=['POST'])
+def reset_password():
+    """Set new password using token from email link."""
+    data = request.get_json() or {}
+    token = (data.get('token') or '').strip() or request.args.get('token')
+    new_password = (data.get('new_password') or data.get('password') or '').strip()
+    if not token:
+        return jsonify({'error': 'Reset token is required'}), 400
+    if not new_password or len(new_password) < 6:
+        return jsonify({'error': 'New password must be at least 6 characters'}), 400
+    user_id = db_consume_password_reset_token(token)
+    if not user_id:
+        return jsonify({'error': 'Invalid or expired reset link. Please request a new one.'}), 400
+    db_update_password(user_id, hash_password(new_password))
+    logger.info(f"Password reset for user_id={user_id}")
+    return jsonify({'message': 'Password updated. You can now log in with your new password.'}), 200
 
 
 @app.route('/auth/me', methods=['GET'])
