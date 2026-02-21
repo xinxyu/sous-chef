@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import re
 import json
 import os
+import argparse
 from datetime import datetime
 import uuid
 import hashlib
@@ -21,7 +22,17 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-CORS(app, supports_credentials=True)
+
+# CORS: allow frontend origin when set (required when frontend and backend are on different domains)
+_cors_origins = os.environ.get('CORS_ORIGINS', os.environ.get('FRONTEND_ORIGIN', ''))
+_origins_list = [o.strip() for o in _cors_origins.split(',') if o.strip()]
+if _origins_list:
+    CORS(app, supports_credentials=True, origins=_origins_list)
+    # So cookies are sent cross-origin (frontend on different domain)
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    app.config['SESSION_COOKIE_SECURE'] = True
+else:
+    CORS(app, supports_credentials=True)  # dev: allow all origins
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -697,6 +708,8 @@ if DATABASE_URL:
         logger.warning("PostgreSQL init_db failed (table may already exist): %s", e)
 
 if __name__ == '__main__':
-    # Run API backend on 4100 so an Angular dev server can use 4200
-    app.run(debug=True, host='0.0.0.0', port=4100)
+    parser = argparse.ArgumentParser(description='Run the sous-chef Flask API')
+    parser.add_argument('-p', '--port', type=int, default=4100, help='Port to run on (default: 4100)')
+    args = parser.parse_args()
+    app.run(debug=True, host='0.0.0.0', port=args.port)
 

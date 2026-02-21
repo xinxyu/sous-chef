@@ -1,5 +1,5 @@
 {
-  "buildCommand": "ng build --configuration production",
+  "buildCommand": "node scripts/inject-api-url.js && ng build --configuration production",
   "outputDirectory": "dist/sous-chef-ui/browser",
     "rewrites": [
       { 

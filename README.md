@@ -50,6 +50,32 @@ Recipes and users are stored in PostgreSQL:
 
 3. Start the app; the `users` and `saved_recipes` tables are created automatically if they don’t exist.
 
+### Connecting frontend and backend (separate deployments)
+
+When the Angular app is deployed on one host (e.g. Vercel) and the Python API on another (e.g. Railway, Render):
+
+1. **Frontend (Angular)**  
+   Keep the API URL out of the repo by using the **`API_URL`** env var at build time:
+   - **Vercel:** In the project → Settings → Environment Variables, add `API_URL` = `https://your-python-api.railway.app` (your real backend URL). Set the build command to:
+     ```bash
+     node scripts/inject-api-url.js && ng build --configuration production
+     ```
+     (Or use the npm script: `npm run build:prod` and set Vercel’s build command to `npm run build:prod`.)
+   - The repo only contains a placeholder (`__API_URL__`); the real URL is injected during the build from `API_URL`, so it is never committed.
+
+2. **Backend (Python)**  
+   Allow the frontend origin for CORS. Set in the backend’s environment (e.g. in Railway/Render dashboard):
+   ```
+   FRONTEND_ORIGIN=https://your-angular-app.vercel.app
+   ```
+   Or multiple origins, comma-separated:
+   ```
+   CORS_ORIGINS=https://app.vercel.app,https://www.yourapp.com
+   ```
+
+3. **Sessions / cookies**  
+   The app uses cookie-based sessions (`withCredentials: true`). If the frontend and API are on different domains, ensure the backend sets cookies with `SameSite=None; Secure` and that the frontend is served over HTTPS so cookies are sent. Flask’s default session cookie may need tuning for cross-origin (e.g. `SESSION_COOKIE_SAMESITE`, `SESSION_COOKIE_SECURE`) in production.
+
 ### Running the App
 
 1. Start the Flask server:

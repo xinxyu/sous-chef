@@ -2,6 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { environment } from '../environments/environment';
 
 export interface User {
   id: string;
@@ -13,7 +14,7 @@ export interface User {
   providedIn: 'root',
 })
 export class AuthService {
-  private readonly apiUrl = 'http://localhost:4100';
+  private readonly apiUrl = environment.apiUrl;
   private readonly currentUserSignal = signal<User | null>(null);
   private readonly currentUserSubject = new BehaviorSubject<User | null>(null);
 

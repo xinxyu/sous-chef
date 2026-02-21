@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../environments/environment';
 
 export interface Recipe {
   id?: string;
@@ -20,8 +21,7 @@ export interface Recipe {
   providedIn: 'root',
 })
 export class RecipeService {
-  // Flask API is running on port 4100
-  private readonly apiUrl = 'http://localhost:4100';
+  private readonly apiUrl = environment.apiUrl;
   private readonly recipesUrl = `${this.apiUrl}/recipes`;
 
   constructor(private http: HttpClient) {}
