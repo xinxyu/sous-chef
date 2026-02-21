@@ -26,18 +26,18 @@
         <h2>{{ r.title || 'Untitled Recipe' }}</h2>
         <div class="recipe-header-actions">
           <button class="btn btn-small" (click)="exportRecipeToPdf()" title="Export to PDF">
-            📄 Export PDF
+            <i class="fa-solid fa-file-pdf icon-left"></i>Export PDF
           </button>
           @if (!r.id && currentUser()) {
             <button
               class="btn btn-save"
               (click)="onSaveRecipe()"
               [disabled]="saving()">
-              {{ saving() ? 'Saving…' : '💾 Save Recipe' }}
+              @if (saving()) { Saving… } @else { <i class="fa-solid fa-floppy-disk icon-left"></i>Save Recipe }
             </button>
           }
           @if (r.id) {
-            <span class="saved-badge">✓ Saved</span>
+            <span class="saved-badge"><i class="fa-solid fa-check icon-left"></i>Saved</span>
           }
           @if (!currentUser()) {
             <div class="login-prompt">
@@ -64,7 +64,7 @@
           target="_blank"
           rel="noopener noreferrer"
           class="recipe-source-link">
-          🔗 View original recipe
+          <i class="fa-solid fa-link icon-left"></i>View original recipe
         </a>
       }
 

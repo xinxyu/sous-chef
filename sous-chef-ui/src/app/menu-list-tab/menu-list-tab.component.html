@@ -1,5 +1,5 @@
 <section class="card menu-card">
-  <h2>📋 Menu &amp; Shopping List</h2>
+  <h2><i class="fa-solid fa-clipboard-list icon-left"></i>Menu &amp; Shopping List</h2>
 
   @if (menuRecipes().length === 0) {
     <div class="empty-state">
@@ -22,14 +22,18 @@
     </div>
     <div class="shopping-list-section">
       <div class="shopping-list-header">
-        <h3>🛒 Shopping List</h3>
+        <h3><i class="fa-solid fa-cart-shopping icon-left"></i>Shopping List</h3>
         <div class="shopping-list-actions">
           <button
             class="btn btn-copy"
             (click)="copyShoppingList()"
             [class.copied]="copyFeedback()"
             title="Copy list for notes">
-            {{ copyFeedback() ? '✓ Copied!' : '📋 Copy for notes' }}
+            @if (copyFeedback()) {
+              <i class="fa-solid fa-check icon-left"></i>Copied!
+            } @else {
+              <i class="fa-solid fa-clipboard icon-left"></i>Copy for notes
+            }
           </button>
           <div class="shopping-list-view-toggle">
             <button

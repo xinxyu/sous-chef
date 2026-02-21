@@ -1,5 +1,5 @@
 <section class="card saved-recipes-list">
-  <h2>📚 My Saved Recipes</h2>
+  <h2><i class="fa-solid fa-book icon-left"></i>My Saved Recipes</h2>
   <p class="menu-hint">Select recipes to add to a menu, then click "Create Menu" for a combined shopping list.</p>
 
   @if (savedRecipes().length === 0) {
@@ -39,13 +39,13 @@
               <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
               <div class="recipe-list-meta">
                 @if (savedRecipe.total_time) {
-                  <span>⏱️ {{ savedRecipe.total_time }}</span>
+                  <span><i class="fa-solid fa-clock icon-left"></i>{{ savedRecipe.total_time }}</span>
                 }
                 @if (savedRecipe.yields) {
-                  <span>🍽️ {{ savedRecipe.yields }}</span>
+                  <span><i class="fa-solid fa-utensils icon-left"></i>{{ savedRecipe.yields }}</span>
                 }
                 @if (savedRecipe.host) {
-                  <span>📍 {{ savedRecipe.host }}</span>
+                  <span><i class="fa-solid fa-location-dot icon-left"></i>{{ savedRecipe.host }}</span>
                 }
               </div>
             </div>
@@ -54,7 +54,7 @@
             class="btn-delete-list"
             (click)="onDeleteRecipe(savedRecipe.id!, $event)"
             title="Delete recipe">
-            ×
+            <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
       }

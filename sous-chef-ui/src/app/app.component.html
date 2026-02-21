@@ -2,12 +2,12 @@
   <header class="header">
     <div class="header-top">
       <div>
-        <h1>🍳 {{ title }}</h1>
+        <h1><i class="fa-solid fa-utensils icon-left"></i>{{ title }}</h1>
       </div>
       <div class="auth-section">
         @if (authService.currentUser(); as currentUser) {
           <div class="user-info">
-            <span>👤 {{ currentUser.username }}</span>
+            <span><i class="fa-solid fa-user icon-left"></i>{{ currentUser.username }}</span>
             <button class="btn btn-small" (click)="onLogout()">Logout</button>
           </div>
         } @else {
@@ -23,13 +23,13 @@
   @if (authService.currentUser()) {
     <div class="tabs">
       <button class="tab-button" [class.active]="activeTab() === 'scrape'" (click)="setActiveTab('scrape')">
-        🔍 Scrape Recipe
+        <i class="fa-solid fa-magnifying-glass icon-left"></i>Scrape Recipe
       </button>
       <button class="tab-button" [class.active]="activeTab() === 'saved'" (click)="setActiveTab('saved')">
-        📚 My Recipes
+        <i class="fa-solid fa-book icon-left"></i>My Recipes
       </button>
       <button class="tab-button" [class.active]="activeTab() === 'menu'" (click)="setActiveTab('menu')">
-        📋 Menu &amp; List
+        <i class="fa-solid fa-clipboard-list icon-left"></i>Menu &amp; List
       </button>
     </div>
   }
