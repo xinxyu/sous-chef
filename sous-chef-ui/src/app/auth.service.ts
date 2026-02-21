@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { environment } from '../environments/environment';
+import { AUTH_TOKEN_KEY } from './auth.interceptor';
 
 export interface User {
   id: string;
@@ -33,10 +34,22 @@ export class AuthService {
     this.currentUserSubject.next(user);
   }
 
+  private clearToken(): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  }
+
   private checkAuthStatus(): void {
-    this.http.get<{ user: User | null }>(`${this.apiUrl}/auth/me`, { withCredentials: true }).subscribe({
-      next: (response) => this.setUser(response.user),
-      error: () => this.setUser(null),
+    this.http.get<{ user: User | null }>(`${this.apiUrl}/auth/me`).subscribe({
+      next: (response) => {
+        if (!response.user) this.clearToken();
+        this.setUser(response.user);
+      },
+      error: () => {
+        this.clearToken();
+        this.setUser(null);
+      },
     });
   }
 
@@ -49,16 +62,22 @@ export class AuthService {
   }
 
   login(username: string, password: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/auth/login`, { username, password }, { withCredentials: true }).pipe(
-      tap((response: any) => {
+    return this.http.post<{ user: User; token?: string }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
+      tap((response) => {
         if (response.user) this.setUser(response.user);
+        if (response.token && typeof localStorage !== 'undefined') {
+          localStorage.setItem(AUTH_TOKEN_KEY, response.token);
+        }
       })
     );
   }
 
   logout(): Observable<any> {
-    return this.http.post(`${this.apiUrl}/auth/logout`, {}, { withCredentials: true }).pipe(
-      tap(() => this.setUser(null))
+    return this.http.post(`${this.apiUrl}/auth/logout`, {}).pipe(
+      tap(() => {
+        this.clearToken();
+        this.setUser(null);
+      })
     );
   }
 

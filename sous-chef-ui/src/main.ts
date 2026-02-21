@@ -1,7 +1,8 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { AppComponent } from './app/app.component';
 import { environment } from './environments/environment';
+import { authInterceptor } from './app/auth.interceptor';
 
 // In dev, use current host for API so mobile (e.g. http://192.168.1.5:4200) calls the same machine on :4100
 if (!environment.production && typeof window !== 'undefined') {
@@ -9,5 +10,5 @@ if (!environment.production && typeof window !== 'undefined') {
 }
 
 bootstrapApplication(AppComponent, {
-  providers: [provideHttpClient()],
+  providers: [provideHttpClient(withInterceptors([authInterceptor]))],
 }).catch((err) => console.error(err));

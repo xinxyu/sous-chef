@@ -13,6 +13,7 @@ import uuid
 import hashlib
 import secrets
 from functools import wraps
+import jwt
 import resend
 import psycopg
 from psycopg.rows import dict_row
@@ -594,8 +595,39 @@ def hash_password(password):
     """Hash a password using SHA256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
+
+# JWT auth (works on mobile without cookies; optional fallback to session)
+_JWT_SECRET = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+_JWT_ALGORITHM = 'HS256'
+_JWT_EXPIRY_DAYS = int(os.environ.get('JWT_EXPIRY_DAYS', '7'))
+
+
+def _encode_jwt(user_id: str) -> str:
+    """Return a JWT containing user_id and exp."""
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.utcnow() + timedelta(days=_JWT_EXPIRY_DAYS),
+        'iat': datetime.utcnow(),
+    }
+    return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
+
+
+def _decode_jwt(token: str):
+    """Decode and verify JWT; return payload dict or None."""
+    try:
+        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+    except Exception:
+        return None
+
+
 def get_current_user_id():
-    """Get the current logged-in user ID from session."""
+    """Get the current user ID from Authorization Bearer token or session."""
+    auth = request.headers.get('Authorization')
+    if auth and auth.startswith('Bearer '):
+        token = auth[7:].strip()
+        payload = _decode_jwt(token)
+        if payload:
+            return payload.get('user_id')
     return session.get('user_id')
 
 def require_auth(f):
@@ -778,7 +810,7 @@ def login():
         
         session['user_id'] = str(user['id'])
         session['username'] = user['username']
-        
+        token = _encode_jwt(str(user['id']))
         logger.info(f"User logged in: {username}")
         return jsonify({
             'message': 'Login successful',
@@ -786,7 +818,8 @@ def login():
                 'id': str(user['id']),
                 'username': user['username'],
                 'email': user.get('email'),
-            }
+            },
+            'token': token,
         }), 200
     except Exception as e:
         logger.error(f"Error logging in: {str(e)}")
