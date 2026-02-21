@@ -25,25 +25,28 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# CORS: allow frontend origin when set (required when frontend and backend are on different domains)
+# CORS and session cookie: production (HTTPS) vs dev/mobile (HTTP)
 _cors_origins = os.environ.get('CORS_ORIGINS', os.environ.get('FRONTEND_ORIGIN', ''))
 _origins_list = [o.strip() for o in _cors_origins.split(',') if o.strip()]
-# When production origin(s) are set, also allow local Angular dev server for local development
-if _origins_list:
-    for origin in ('http://localhost:4200', 'http://127.0.0.1:4200'):
-        if origin not in _origins_list:
-            _origins_list.append(origin)
-    CORS(app, supports_credentials=True, origins=_origins_list)
-    # Only use SameSite=None; Secure when explicitly enabled (HTTPS). Over HTTP (e.g. mobile
-    # at http://192.168.x.x) browsers refuse to store Secure cookies, so the session would
-    # never persist and API calls would return 401 after login. Set SESSION_COOKIE_SECURE=1
-    # in production when frontend and API are served over HTTPS.
-    _secure = os.environ.get('SESSION_COOKIE_SECURE', '').strip().lower() in ('1', 'true', 'yes')
-    if _secure:
-        app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-        app.config['SESSION_COOKIE_SECURE'] = True
+_secure = os.environ.get('SESSION_COOKIE_SECURE', '').strip().lower() in ('1', 'true', 'yes')
+
+if _secure:
+    # Production HTTPS: restrict CORS to allowed frontend origin(s)
+    if _origins_list:
+        for origin in ('http://localhost:4200', 'http://127.0.0.1:4200'):
+            if origin not in _origins_list:
+                _origins_list.append(origin)
+        CORS(app, supports_credentials=True, origins=_origins_list)
+    else:
+        CORS(app, supports_credentials=True)
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    app.config['SESSION_COOKIE_SECURE'] = True
 else:
-    CORS(app, supports_credentials=True)  # dev: allow all origins
+    # Dev / mobile over HTTP: allow any origin so phone (e.g. http://192.168.x.x:4200) works
+    # without adding it to CORS_ORIGINS. Session cookie is not Secure so browser stores it.
+    CORS(app, supports_credentials=True)
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
