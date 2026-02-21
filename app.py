@@ -100,41 +100,48 @@ def fallback_parse_ingredients(url):
                 if not script_content:
                     continue
                 data = json.loads(script_content)
+                recipe_data = None
                 if isinstance(data, dict):
                     recipe_data = data
                 elif isinstance(data, list):
-                    # Find the Recipe object in the list
-                    recipe_data = next((item for item in data if item.get('@type') == 'Recipe'), {})
-                
-                if recipe_data.get('@type') == 'Recipe' and 'recipeIngredient' in recipe_data:
-                    ingredients_raw = recipe_data['recipeIngredient']
-                    if isinstance(ingredients_raw, list):
-                        # Handle both string and object formats
-                        processed_ingredients = []
-                        for ing in ingredients_raw:
-                            if isinstance(ing, str):
-                                processed_ingredients.append(ing.strip())
-                            elif isinstance(ing, dict):
-                                # Some sites structure ingredients as objects
-                                # Try to combine quantity, unit, and name
-                                parts = []
-                                if 'amount' in ing:
-                                    parts.append(str(ing['amount']))
-                                if 'unit' in ing:
-                                    parts.append(str(ing['unit']))
-                                if 'name' in ing:
-                                    parts.append(str(ing['name']))
-                                elif 'ingredient' in ing:
-                                    parts.append(str(ing['ingredient']))
-                                if parts:
-                                    processed_ingredients.append(' '.join(parts).strip())
-                            else:
-                                processed_ingredients.append(str(ing).strip())
-                        
-                        ingredients = [ing for ing in processed_ingredients if ing]
-                        if ingredients:
-                            logger.info(f"Found {len(ingredients)} ingredients from JSON-LD")
-                            break
+                    # Find the Recipe object in the list (skip None items)
+                    recipe_data = next(
+                        (item for item in data if item is not None and isinstance(item, dict) and item.get('@type') == 'Recipe'),
+                        None,
+                    )
+                if recipe_data is None or not isinstance(recipe_data, dict):
+                    continue
+                if recipe_data.get('@type') != 'Recipe' or 'recipeIngredient' not in recipe_data:
+                    continue
+                ingredients_raw = recipe_data['recipeIngredient']
+                if not isinstance(ingredients_raw, list):
+                    continue
+                # Handle both string and object formats
+                processed_ingredients = []
+                for ing in ingredients_raw:
+                    if ing is None:
+                        continue
+                    if isinstance(ing, str):
+                        processed_ingredients.append(ing.strip())
+                    elif isinstance(ing, dict):
+                        # Some sites structure ingredients as objects
+                        parts = []
+                        if 'amount' in ing:
+                            parts.append(str(ing['amount']))
+                        if 'unit' in ing:
+                            parts.append(str(ing['unit']))
+                        if 'name' in ing:
+                            parts.append(str(ing['name']))
+                        elif 'ingredient' in ing:
+                            parts.append(str(ing['ingredient']))
+                        if parts:
+                            processed_ingredients.append(' '.join(parts).strip())
+                    else:
+                        processed_ingredients.append(str(ing).strip())
+                ingredients = [ing for ing in processed_ingredients if ing]
+                if ingredients:
+                    logger.info(f"Found {len(ingredients)} ingredients from JSON-LD")
+                    break
             except (json.JSONDecodeError, KeyError, AttributeError, TypeError) as e:
                 logger.debug(f"Error parsing JSON-LD: {e}")
                 continue
@@ -296,50 +303,60 @@ def fallback_parse_ingredients(url):
 @app.route('/scrape', methods=['POST'])
 def scrape_recipe():
     """Scrape a recipe from the given URL."""
+    data = request.get_json()
+    url = data.get('url') if data else request.form.get('url')
+    if not url:
+        return jsonify({'error': 'URL is required'}), 400
+    logger.info(f"Scraping recipe from: {url}")
+
     try:
-        data = request.get_json()
-        url = data.get('url') if data else request.form.get('url')
-        
-        if not url:
-            return jsonify({'error': 'URL is required'}), 400
-        
-        logger.info(f"Scraping recipe from: {url}")
-        
-        # Scrape the recipe
         scraper = scrape_me(url, wild_mode=True)
-        
-        # Extract recipe data
         ingredients = scraper.ingredients()
-        logger.info(f"recipe-scrapers found {len(ingredients) if ingredients else 0} ingredients")
-        
-        # If ingredients are empty or missing, try fallback parsing
-        if not ingredients or len(ingredients) == 0:
-            logger.warning(f"No ingredients found by recipe-scrapers, trying fallback parser")
+        if ingredients is None or not isinstance(ingredients, list):
+            ingredients = []
+        logger.info(f"recipe-scrapers found {len(ingredients)} ingredients")
+
+        if not ingredients:
+            logger.warning("No ingredients from recipe-scrapers, trying fallback parser")
             ingredients = fallback_parse_ingredients(url)
             if ingredients:
-                logger.info(f"Fallback parser successfully extracted {len(ingredients)} ingredients")
-            else:
-                logger.warning(f"Fallback parser also failed to find ingredients")
-        else:
-            logger.info(f"Using {len(ingredients)} ingredients from recipe-scrapers")
-        
+                logger.info(f"Fallback parser extracted {len(ingredients)} ingredients")
+
+        instructions = scraper.instructions_list()
+        if instructions is None or not isinstance(instructions, list):
+            instructions = []
         recipe_data = {
-            'title': scraper.title(),
+            'title': scraper.title() or '',
             'total_time': scraper.total_time(),
-            'yields': scraper.yields(),
+            'yields': scraper.yields() or '',
             'ingredients': ingredients,
-            'instructions': scraper.instructions_list(),
-            'image': scraper.image(),
-            'host': scraper.host(),
-            'nutrients': scraper.nutrients() if hasattr(scraper, 'nutrients') else None,
+            'instructions': instructions,
+            'image': scraper.image() or '',
+            'host': scraper.host() or '',
+            'nutrients': scraper.nutrients() if hasattr(scraper, 'nutrients') and scraper.nutrients() else None,
             'source_url': url,
         }
-        
         return jsonify(recipe_data), 200
-        
+
     except Exception as e:
-        logger.error(f"Error scraping recipe: {str(e)}")
-        return jsonify({'error': f'Failed to scrape recipe: {str(e)}'}), 500
+        logger.warning(f"recipe-scrapers failed ({e}), trying fallback parser only")
+        try:
+            ingredients = fallback_parse_ingredients(url)
+            recipe_data = {
+                'title': '',
+                'total_time': None,
+                'yields': '',
+                'ingredients': ingredients or [],
+                'instructions': [],
+                'image': '',
+                'host': '',
+                'nutrients': None,
+                'source_url': url,
+            }
+            return jsonify(recipe_data), 200
+        except Exception as fallback_e:
+            logger.error(f"Error scraping recipe: {fallback_e}")
+            return jsonify({'error': f'Failed to scrape recipe: {str(fallback_e)}'}), 500
 
 
 # User management (PostgreSQL)
