@@ -74,7 +74,15 @@ When the Angular app is deployed on one host (e.g. Vercel) and the Python API on
    ```
 
 3. **Sessions / cookies**  
-   The app uses cookie-based sessions (`withCredentials: true`). If the frontend and API are on different domains, ensure the backend sets cookies with `SameSite=None; Secure` and that the frontend is served over HTTPS so cookies are sent. Flask’s default session cookie may need tuning for cross-origin (e.g. `SESSION_COOKIE_SAMESITE`, `SESSION_COOKIE_SECURE`) in production.
+   The app uses cookie-based sessions (`withCredentials: true`). If the frontend and API are on different domains, set **`SESSION_COOKIE_SECURE=1`** in the backend environment so cookies use `SameSite=None; Secure` (HTTPS only). For local or mobile testing over **HTTP**, leave `SESSION_COOKIE_SECURE` unset so the session cookie can be stored; otherwise you’ll see “Authentication required” after login on mobile.
+
+### Mobile / same-network testing
+
+To use the app on your phone while the dev servers run on your computer:
+
+1. **Backend:** In `.env`, add your machine’s URL to CORS (e.g. `CORS_ORIGINS=http://192.168.1.5:4200`). Do **not** set `SESSION_COOKIE_SECURE` so the session cookie works over HTTP.
+2. **Frontend:** Run the Angular dev server with `ng serve --host 0.0.0.0`, then on the phone open `http://YOUR_COMPUTER_IP:4200`. In development the app uses the current host for the API (e.g. `http://YOUR_COMPUTER_IP:4100` when opened from the phone), so no extra config is needed.
+3. Log in on the phone; saved recipes and save should work once the session cookie is stored (see step 1).
 
 ### Email verification and password reset
 

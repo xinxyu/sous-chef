@@ -34,9 +34,14 @@ if _origins_list:
         if origin not in _origins_list:
             _origins_list.append(origin)
     CORS(app, supports_credentials=True, origins=_origins_list)
-    # So cookies are sent cross-origin (frontend on different domain)
-    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-    app.config['SESSION_COOKIE_SECURE'] = True
+    # Only use SameSite=None; Secure when explicitly enabled (HTTPS). Over HTTP (e.g. mobile
+    # at http://192.168.x.x) browsers refuse to store Secure cookies, so the session would
+    # never persist and API calls would return 401 after login. Set SESSION_COOKIE_SECURE=1
+    # in production when frontend and API are served over HTTPS.
+    _secure = os.environ.get('SESSION_COOKIE_SECURE', '').strip().lower() in ('1', 'true', 'yes')
+    if _secure:
+        app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+        app.config['SESSION_COOKIE_SECURE'] = True
 else:
     CORS(app, supports_credentials=True)  # dev: allow all origins
 logging.basicConfig(level=logging.INFO)
