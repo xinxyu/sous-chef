@@ -142,3 +142,20 @@ The `recipe-scrapers` library supports many popular recipe websites including:
 - And many more...
 
 See the [recipe-scrapers documentation](https://github.com/hhursev/recipe-scrapers) for a full list of supported sites.
+
+## Testing
+
+Tests use [pytest](https://docs.pytest.org/). Install dependencies (including pytest) from the project root, then run:
+
+```bash
+source ./venv/bin/activate
+pip install -r requirements.txt
+pytest test_fallback.py -v
+```
+
+- **Unit tests** (default): Mock HTTP so no network is used. They check that the fallback ingredient parser correctly extracts count and contents from HTML (e.g. JSON-LD recipe data).
+- **Integration test**: One test hits the real AllRecipes URL; it is not run by default. To run it and see the summary (e.g. 1 passed):
+  ```bash
+  pytest test_fallback.py -m integration -v -s
+  ```
+  Omit `-m integration` to run only the fast, mocked unit tests.

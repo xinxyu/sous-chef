@@ -23,6 +23,7 @@ def scrape_recipe():
         if ingredients is None or not isinstance(ingredients, list):
             ingredients = []
         logger.info("recipe-scrapers found %s ingredients", len(ingredients))
+        logger.info("ingredients: %s", ingredients)
 
         if not ingredients:
             logger.warning("No ingredients from recipe-scrapers, trying fallback parser")
