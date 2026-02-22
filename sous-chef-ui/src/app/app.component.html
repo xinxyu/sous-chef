@@ -60,24 +60,29 @@
 
   <!-- Register Modal -->
   @if (showRegister()) {
-    <div class="modal-overlay" (click)="showRegister.set(false)">
+    <div class="modal-overlay" (click)="closeRegister()">
       <div class="modal" (click)="$event.stopPropagation()">
-        <h2>Register</h2>
-        <form (ngSubmit)="onRegister()">
-          <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
-          <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (required)" required />
-          <input type="password" [(ngModel)]="registerPassword" name="registerPassword" placeholder="Password" required />
-          @if (authError()) {
-            <div class="error">{{ authError() }}</div>
-          }
-          @if (authSuccess()) {
-            <div class="success">{{ authSuccess() }}</div>
-          }
-          <div class="modal-actions">
-            <button type="submit" class="btn" [disabled]="authLoading()">Register</button>
-            <button type="button" class="btn btn-secondary" (click)="showRegister.set(false)">Cancel</button>
+        @if (authSuccess()) {
+          <div class="register-success">
+            <h2>Check your email</h2>
+            <p class="register-success-message">{{ authSuccess() }}</p>
+            <button type="button" class="btn" (click)="closeRegister()">Close</button>
           </div>
-        </form>
+        } @else {
+          <h2>Register</h2>
+          <form (ngSubmit)="onRegister()">
+            <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
+            <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (required)" required />
+            <input type="password" [(ngModel)]="registerPassword" name="registerPassword" placeholder="Password" required />
+            @if (authError()) {
+              <div class="error">{{ authError() }}</div>
+            }
+            <div class="modal-actions">
+              <button type="submit" class="btn" [disabled]="authLoading()">Register</button>
+              <button type="button" class="btn btn-secondary" (click)="showRegister.set(false)">Cancel</button>
+            </div>
+          </form>
+        }
       </div>
     </div>
   }
@@ -87,7 +92,7 @@
     <div class="modal-overlay" (click)="showForgotPassword.set(false)">
       <div class="modal" (click)="$event.stopPropagation()">
         <h2>Forgot password</h2>
-        <p class="modal-hint">Enter your email and we’ll send you a link to reset your password.</p>
+        <p class="modal-hint">Enter your email and we'll send you a link to reset your password.</p>
         <form (ngSubmit)="onForgotPassword()">
           <input type="email" [(ngModel)]="forgotEmail" name="forgotEmail" placeholder="Email" required />
           @if (authError()) {

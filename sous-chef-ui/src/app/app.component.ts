@@ -105,6 +105,11 @@ export class AppComponent implements OnInit {
     this.showLogin.set(true);
   }
 
+  closeRegister(): void {
+    this.showRegister.set(false);
+    this.authSuccess.set(null);
+  }
+
   setActiveTab(tab: 'scrape' | 'saved' | 'menu'): void {
     this.activeTab.set(tab);
     const user = this.authService.currentUser();
@@ -225,7 +230,10 @@ export class AppComponent implements OnInit {
             this.registerEmail = '';
             this.registerPassword = '';
           } else {
-            this.authSuccess.set(res.message || 'Please check your email to verify your account.');
+            const email = this.registerEmail;
+            this.authSuccess.set(
+              `We've sent a verification link to ${email}. Please check your inbox to verify your account.`
+            );
             this.registerUsername = '';
             this.registerEmail = '';
             this.registerPassword = '';

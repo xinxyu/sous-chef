@@ -159,6 +159,28 @@
   font-size: 14px;
   margin: 0;
 }
+
+.register-success {
+  text-align: center;
+  padding: 10px 0;
+
+  h2 {
+    margin-bottom: 20px;
+    color: #2e7d32;
+    font-size: 1.5rem;
+  }
+}
+
+.register-success-message {
+  color: #333;
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 24px;
+  padding: 16px;
+  background: #e8f5e9;
+  border-radius: 10px;
+  border: 1px solid #a5d6a7;
+}
 .forgot-link {
   color: #667eea;
   cursor: pointer;
