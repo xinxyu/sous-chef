@@ -17,6 +17,8 @@
 }
 
 .menu-actions {
+  display: flex;
+  justify-content: center;
   margin-bottom: 20px;
 }
 
@@ -34,7 +36,7 @@
   background: #f8f9fa;
   border-radius: 10px;
   border: 2px solid transparent;
-  cursor: pointer;
+  cursor: default;
   transition: all 0.2s;
 }
 .recipe-list-item:hover {
@@ -50,23 +52,36 @@
 .recipe-list-content {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 0;
   flex: 1;
   min-width: 0;
+  cursor: pointer;
 }
 
 .recipe-checkbox {
   display: flex;
   align-items: center;
+  justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  margin: 0;
+  margin: -15px 20px -15px -15px;
+  padding: 12px 16px;
+  border-right: 1px solid #e0e0e0;
+  min-width: 48px;
   input {
     width: 20px;
     height: 20px;
     cursor: pointer;
     accent-color: #667eea;
   }
+}
+
+.recipe-list-content-inner {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+  min-width: 0;
 }
 
 .recipe-list-image {
@@ -96,13 +111,38 @@
   }
 }
 
+.btn-view-recipe {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: #667eea;
+  background: transparent;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background: #667eea;
+    color: white;
+  }
+}
+
 // Mobile: allow title to wrap so more words are readable (no overlap)
 @media (max-width: 600px) {
   .recipe-list-item {
     padding: 12px;
     align-items: flex-start;
   }
-  .recipe-list-content {
+  .recipe-checkbox {
+    margin: -12px 14px -12px -12px;
+    padding: 10px 12px;
+    min-width: 44px;
+  }
+  .recipe-list-content-inner {
     gap: 10px;
     min-width: 0;
     overflow: hidden;

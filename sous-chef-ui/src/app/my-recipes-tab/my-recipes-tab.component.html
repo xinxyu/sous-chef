@@ -21,32 +21,42 @@
       @for (savedRecipe of savedRecipes(); track savedRecipe.id) {
         <div
           class="recipe-list-item selectable"
-          [class.selected]="isSelected(savedRecipe.id!)"
-          (click)="onLoadRecipe(savedRecipe.id!)">
-          <div class="recipe-list-content">
+          [class.selected]="isSelected(savedRecipe.id!)">
+          <div
+            class="recipe-list-content"
+            (click)="onToggleSelection(savedRecipe.id!, $event)">
             <label class="recipe-checkbox" (click)="$event.stopPropagation()">
               <input
                 type="checkbox"
                 [checked]="isSelected(savedRecipe.id!)"
                 (click)="onToggleSelection(savedRecipe.id!, $event); $event.stopPropagation()" />
             </label>
-            @if (savedRecipe.image) {
-              <div class="recipe-list-image">
-                <img [src]="savedRecipe.image" alt="Recipe" />
-              </div>
-            }
-            <div class="recipe-list-info">
-              <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
-              <div class="recipe-list-meta">
-                @if (savedRecipe.total_time) {
-                  <span><i class="fa-solid fa-clock icon-left"></i>{{ savedRecipe.total_time }}</span>
-                }
-                @if (savedRecipe.yields) {
-                  <span><i class="fa-solid fa-utensils icon-left"></i>{{ savedRecipe.yields }}</span>
-                }
-                @if (savedRecipe.host) {
-                  <span><i class="fa-solid fa-link icon-left"></i>{{ savedRecipe.host }}</span>
-                }
+            <div class="recipe-list-content-inner">
+              @if (savedRecipe.image) {
+                <div class="recipe-list-image">
+                  <img [src]="savedRecipe.image" alt="Recipe" />
+                </div>
+              }
+              <div class="recipe-list-info">
+                <h3>{{ savedRecipe.title || 'Untitled Recipe' }}</h3>
+                <div class="recipe-list-meta">
+                  @if (savedRecipe.total_time) {
+                    <span><i class="fa-solid fa-clock icon-left"></i>{{ savedRecipe.total_time }}</span>
+                  }
+                  @if (savedRecipe.yields) {
+                    <span><i class="fa-solid fa-utensils icon-left"></i>{{ savedRecipe.yields }}</span>
+                  }
+                  @if (savedRecipe.host) {
+                    <span><i class="fa-solid fa-link icon-left"></i>{{ savedRecipe.host }}</span>
+                  }
+                </div>
+                <button
+                  type="button"
+                  class="btn-view-recipe"
+                  (click)="onLoadRecipe(savedRecipe.id!); $event.stopPropagation()"
+                  title="View recipe">
+                  <i class="fa-solid fa-arrow-right icon-left"></i>View
+                </button>
               </div>
             </div>
           </div>
