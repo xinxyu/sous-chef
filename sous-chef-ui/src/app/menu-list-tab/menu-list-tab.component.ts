@@ -23,9 +23,13 @@ export class MenuListTabComponent {
   private getAmountPhrase(ingredient: string): string {
     const trimmed = ingredient.trim();
     const match = trimmed.match(
-      /^([\d¼½¾⅓⅔⅛⅜⅝⅞\.\-\/\s]+(?:cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|ounce|ounces|oz|pound|pounds|lb|lbs|clove|cloves|can|cans|package|packages|pinch|dash|slice|slices|piece|pieces)?\s*)/i
+      /^([\d¼½¾⅓⅔⅛⅜⅝⅞\.\-\/\s]+(?:cups|cup|tablespoons|tablespoon|tbsp|teaspoons|teaspoon|tsp|ounces|ounce|oz|pounds|pound|lbs|lb|cloves|clove|cans|can|packages|package|pinch|dash|slices|slice|pieces|piece)?\s*)/i
     );
-    return match ? match[1].trim() : '';
+    if (!match) return '';
+    const amount = match[1].trim();
+    // Only treat as amount if it contains a number/fraction (avoids ". " or " " as amount)
+    const hasNumber = /[\d¼½¾⅓⅔⅛⅜⅝⅞]/.test(amount);
+    return hasNumber ? amount : '';
   }
 
   private normalizeIngredientKey(ingredient: string): string {
@@ -33,7 +37,9 @@ export class MenuListTabComponent {
     const amount = this.getAmountPhrase(ingredient);
     if (!amount) return lower;
     const rest = lower.slice(amount.length).replace(/\s+/g, ' ').trim();
-    return rest || lower;
+    // If remainder is empty or a single character (e.g. "2 s" -> "s"), use full string as name
+    if (!rest || rest.length <= 1) return lower;
+    return rest;
   }
 
   private combineIngredients(ingredients: string[]): { name: string; amounts: string[] }[] {
