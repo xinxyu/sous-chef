@@ -1,12 +1,26 @@
 """Scrape blueprint: POST /scrape to extract recipe from URL."""
 import logging
-from flask import Blueprint, request, jsonify
-from recipe_scrapers import scrape_me
+import urllib.request
 
-from utils.scraping import fallback_parse_ingredients
+from flask import Blueprint, request, jsonify
+from recipe_scrapers import scrape_html
+
+from utils.scraping import (
+    fallback_parse_ingredients_from_html,
+    fallback_parse_recipe_from_html,
+    fallback_parse_recipe,
+    _DEFAULT_HEADERS,
+)
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("scrape", __name__)
+
+
+def _fetch_html(url: str) -> str:
+    """Fetch HTML with browser-like headers to reduce 403 blocks."""
+    req = urllib.request.Request(url, headers=_DEFAULT_HEADERS)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return resp.read().decode(errors="replace")
 
 
 @bp.route("/scrape", methods=["POST"])
@@ -18,24 +32,32 @@ def scrape_recipe():
     logger.info("Scraping recipe from: %s", url)
 
     try:
-        scraper = scrape_me(url, wild_mode=True)
+        html = _fetch_html(url)
+    except Exception as e:
+        logger.error("Failed to fetch URL: %s", e)
+        return jsonify({"error": f"Failed to fetch URL: {str(e)}"}), 500
+
+    try:
+        scraper = scrape_html(html, org_url=url)
+        title = scraper.title()
+        if title is None:
+            title = ""
         ingredients = scraper.ingredients()
         if ingredients is None or not isinstance(ingredients, list):
             ingredients = []
-        logger.info("recipe-scrapers found %s ingredients", len(ingredients))
-        logger.info("ingredients: %s", ingredients)
 
         if not ingredients:
             logger.warning("No ingredients from recipe-scrapers, trying fallback parser")
-            ingredients = fallback_parse_ingredients(url)
+            ingredients = fallback_parse_ingredients_from_html(html)
             if ingredients:
                 logger.info("Fallback parser extracted %s ingredients", len(ingredients))
 
         instructions = scraper.instructions_list()
         if instructions is None or not isinstance(instructions, list):
             instructions = []
+
         recipe_data = {
-            "title": scraper.title() or "",
+            "title": title or "",
             "total_time": scraper.total_time(),
             "yields": scraper.yields() or "",
             "ingredients": ingredients,
@@ -48,20 +70,9 @@ def scrape_recipe():
         return jsonify(recipe_data), 200
     except Exception as e:
         logger.warning("recipe-scrapers failed (%s), trying fallback parser only", e)
-        try:
-            ingredients = fallback_parse_ingredients(url)
-            recipe_data = {
-                "title": "",
-                "total_time": None,
-                "yields": "",
-                "ingredients": ingredients or [],
-                "instructions": [],
-                "image": "",
-                "host": "",
-                "nutrients": None,
-                "source_url": url,
-            }
-            return jsonify(recipe_data), 200
-        except Exception as fallback_e:
-            logger.error("Error scraping recipe: %s", fallback_e)
-            return jsonify({"error": f"Failed to scrape recipe: {str(fallback_e)}"}), 500
+        fallback = fallback_parse_recipe_from_html(html, url) or fallback_parse_recipe(url)
+        if fallback:
+            fallback["source_url"] = url
+            return jsonify(fallback), 200
+        logger.error("Error scraping recipe: %s", e)
+        return jsonify({"error": f"Failed to scrape recipe: {str(e)}"}), 500
