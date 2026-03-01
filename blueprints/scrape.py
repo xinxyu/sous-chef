@@ -1,7 +1,8 @@
 """Scrape blueprint: POST /scrape to extract recipe from URL."""
 import logging
-import urllib.request
+from urllib.parse import urlparse
 
+import requests
 from flask import Blueprint, request, jsonify
 from recipe_scrapers import scrape_html
 
@@ -15,12 +16,47 @@ from utils.scraping import (
 logger = logging.getLogger(__name__)
 bp = Blueprint("scrape", __name__)
 
+# Cloudflare bypass scraper - created once, reused for session cookies
+_cloudscraper = None
+
+
+def _get_cloudscraper():
+    global _cloudscraper
+    if _cloudscraper is None:
+        try:
+            import cloudscraper
+            _cloudscraper = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "darwin", "desktop": True}
+            )
+        except ImportError:
+            _cloudscraper = False
+    return _cloudscraper if _cloudscraper else None
+
 
 def _fetch_html(url: str) -> str:
-    """Fetch HTML with browser-like headers to reduce 403 blocks."""
-    req = urllib.request.Request(url, headers=_DEFAULT_HEADERS)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return resp.read().decode(errors="replace")
+    """Fetch HTML with browser-like headers. Uses cloudscraper on 403 for Cloudflare sites."""
+    headers = dict(_DEFAULT_HEADERS)
+    parsed = urlparse(url)
+    if parsed.netloc:
+        headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 403:
+            scraper = _get_cloudscraper()
+            if scraper:
+                logger.info("Got 403, retrying with cloudscraper for Cloudflare bypass")
+                resp = scraper.get(url, timeout=15)
+                resp.raise_for_status()
+            else:
+                raise
+        else:
+            raise
+
+    resp.encoding = resp.apparent_encoding or "utf-8"
+    return resp.text
 
 
 @bp.route("/scrape", methods=["POST"])
