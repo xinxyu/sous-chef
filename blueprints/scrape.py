@@ -33,28 +33,45 @@ def _get_cloudscraper():
     return _cloudscraper if _cloudscraper else None
 
 
+def _fetch_with_curl_cffi(url: str, headers: dict) -> str | None:
+    """Fetch with curl_cffi (Chrome TLS fingerprint). Returns HTML or None on failure."""
+    try:
+        from curl_cffi import requests as curl_requests
+        resp = curl_requests.get(url, headers=headers, timeout=20, impersonate="chrome120")
+        resp.raise_for_status()
+        return resp.text
+    except ImportError:
+        return None
+    except Exception:
+        return None
+
+
 def _fetch_html(url: str) -> str:
-    """Fetch HTML with browser-like headers. Uses cloudscraper on 403 for Cloudflare sites."""
+    """Fetch HTML. Prefers curl_cffi (best Cloudflare bypass), then cloudscraper, then requests."""
     headers = dict(_DEFAULT_HEADERS)
     parsed = urlparse(url)
     if parsed.netloc:
         headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
 
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 403:
-            scraper = _get_cloudscraper()
-            if scraper:
-                logger.info("Got 403, retrying with cloudscraper for Cloudflare bypass")
-                resp = scraper.get(url, timeout=15)
-                resp.raise_for_status()
-            else:
-                raise
-        else:
-            raise
+    # 1. curl_cffi (Chrome TLS fingerprint - most reliable for Cloudflare)
+    html = _fetch_with_curl_cffi(url, headers)
+    if html:
+        return html
 
+    # 2. cloudscraper (Cloudflare JS challenge solver)
+    scraper = _get_cloudscraper()
+    if scraper:
+        try:
+            resp = scraper.get(url, timeout=20)
+            resp.raise_for_status()
+            resp.encoding = resp.apparent_encoding or "utf-8"
+            return resp.text
+        except requests.exceptions.HTTPError:
+            pass
+
+    # 3. plain requests
+    resp = requests.get(url, headers=headers, timeout=15)
+    resp.raise_for_status()
     resp.encoding = resp.apparent_encoding or "utf-8"
     return resp.text
 
