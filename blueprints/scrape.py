@@ -117,18 +117,18 @@ def _fetch_with_proxy(url: str, headers: dict) -> str | None:
         return None
 
 
-def _fetch_with_curl_cffi(url: str, headers: dict) -> str | None:
-    """Fetch with curl_cffi. Optional proxy and SCRAPING_CA_BUNDLE for Bright Data TLS."""
+def _fetch_with_curl_cffi(url: str, headers: dict, use_proxy: bool = True) -> str | None:
+    """Fetch with curl_cffi. When use_proxy is True, uses SCRAPING_PROXY and SCRAPING_CA_BUNDLE for Bright Data TLS."""
     try:
         from curl_cffi import requests as curl_requests
-        proxy = os.environ.get("SCRAPING_PROXY")
-        verify = _proxy_verify()
+        proxy = os.environ.get("SCRAPING_PROXY") if use_proxy else None
+        verify = _proxy_verify() if use_proxy else True
         resp = curl_requests.get(
             url,
             headers=headers,
             timeout=20,
             impersonate="chrome120",
-            proxy=proxy or None,
+            proxy=proxy,
             verify=verify,
         )
         resp.raise_for_status()
@@ -155,42 +155,71 @@ def _user_friendly_fetch_error(status_code: int, url: str) -> str:
 
 
 def _fetch_html(url: str) -> str:
-    """Fetch HTML. If SCRAPING_PROXY is set, use proxy first; then curl_cffi, cloudscraper, requests."""
+    """Fetch HTML. Try without proxy first; if that fails (blocked, errors), fall back to proxy when SCRAPING_PROXY is set."""
     headers = dict(_DEFAULT_HEADERS)
     parsed = urlparse(url)
     if parsed.netloc:
         headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
 
-    # 0. Proxy (Bright Data, ScraperAPI, etc.) when set – avoids datacenter IP blocks
+    last_error = None
+
+    # Phase 1: try without proxy
+    html = _fetch_with_curl_cffi(url, headers, use_proxy=False)
+    if html:
+        return html
+
+    scraper = _get_cloudscraper()
+    if scraper:
+        try:
+            resp = scraper.get(url, timeout=20)
+            resp.raise_for_status()
+            resp.encoding = resp.apparent_encoding or "utf-8"
+            return resp.text
+        except requests.exceptions.HTTPError as e:
+            last_error = e
+        except Exception as e:
+            last_error = e
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or "utf-8"
+        return resp.text
+    except requests.exceptions.HTTPError as e:
+        last_error = e
+    except Exception as e:
+        last_error = e
+
+    # Phase 2: fall back to proxy when configured
     if os.environ.get("SCRAPING_PROXY"):
         html = _fetch_with_proxy(url, headers)
         if html:
             return html
 
-    # 1. curl_cffi (Chrome TLS fingerprint)
-    html = _fetch_with_curl_cffi(url, headers)
-    if html:
-        return html
+        html = _fetch_with_curl_cffi(url, headers, use_proxy=True)
+        if html:
+            return html
 
-    # 2. cloudscraper
-    scraper = _get_cloudscraper()
-    if scraper:
-        try:
-            kwargs = _proxy_kwargs()
-            resp = scraper.get(url, timeout=20, **kwargs)
-            resp.raise_for_status()
-            resp.encoding = resp.apparent_encoding or "utf-8"
-            return resp.text
-        except requests.exceptions.HTTPError as e:
-            if e.response and e.response.status_code in (402, 403):
+        if scraper:
+            try:
+                resp = scraper.get(url, timeout=20, **_proxy_kwargs())
+                resp.raise_for_status()
+                resp.encoding = resp.apparent_encoding or "utf-8"
+                return resp.text
+            except requests.exceptions.HTTPError:
                 raise
-            pass
+            except Exception:
+                pass
 
-    # 3. plain requests (with optional proxy)
-    resp = requests.get(url, headers=headers, timeout=15, **_proxy_kwargs())
-    resp.raise_for_status()
-    resp.encoding = resp.apparent_encoding or "utf-8"
-    return resp.text
+        resp = requests.get(url, headers=headers, timeout=15, **_proxy_kwargs())
+        resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or "utf-8"
+        return resp.text
+
+    # No proxy configured; re-raise the last error from phase 1
+    if last_error:
+        raise last_error
+    raise RuntimeError("Failed to fetch URL")
 
 
 @bp.route("/scrape", methods=["POST"])
