@@ -79,9 +79,12 @@ When the Angular app is deployed on one host (e.g. Vercel) and the Python API on
 4. **Recipe scraping proxy (402/403 on deployed servers)**  
    Recipe sites often block cloud IPs. Set **`SCRAPING_PROXY`** to an HTTP proxy URL so scraping works when deployed. Example with [Bright Data](https://brightdata.com/): create a residential or datacenter proxy zone, then set:
    ```
-   SCRAPING_PROXY=http://USERNAME:PASSWORD@zproxy.lum-superproxy.io:22225
+   SCRAPING_PROXY=http://brd-customer-<customer_id>-zone-<zone_name>:<zone_password>@brd.superproxy.io:33335
    ```
-   Use the host and port from your Bright Data zone (e.g. `brd.superproxy.io:22225`). Other providers (ScraperAPI, ZenRows) work the same: set `SCRAPING_PROXY` to their proxy URL. Leave unset for local development.
+   Use the host and port from your Bright Data zone. Bright Data’s **new** proxy port is **33335** (see [SSL certificate](https://docs.brightdata.com/general/account/ssl-certificate)).  
+   **SSL (Bright Data) – no cert in code:** Either (1) **Install** Bright Data’s [CA certificate](https://docs.brightdata.com/general/account/ssl-certificate) on the server that runs the app (e.g. Linux: copy `ca.crt` to `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates`). Then the app uses the system trust store and no env var is needed. Or (2) set **`SCRAPING_CA_BUNDLE`** to a **path** to `ca.crt` or to the **PEM content** (paste the cert into your deployment’s env/secrets). Other providers (ScraperAPI, ZenRows) need only `SCRAPING_PROXY`. Leave both unset for local development.
+
+   **DigitalOcean App Platform:** You can’t install system certs, so use env vars. In your App’s **Settings → App-Level Environment Variables** (or component env vars), add **`SCRAPING_PROXY`** as above and **`SCRAPING_CA_BUNDLE`** with the Bright Data CA. Either paste the full PEM (multi-line) into the value, or use a single-line base64 version: run `base64 -i ca.crt | tr -d '\n'` locally and set `SCRAPING_CA_BUNDLE` to that string.
 
 ### Mobile / same-network testing
 

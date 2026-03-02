@@ -1,4 +1,5 @@
 """Scrape blueprint: POST /scrape to extract recipe from URL."""
+import base64
 import logging
 import os
 from urllib.parse import urlparse
@@ -34,25 +35,79 @@ def _get_cloudscraper():
     return _cloudscraper if _cloudscraper else None
 
 
+# Bright Data proxy TLS. No cert in code: either install CA on server (use default verify)
+# or set SCRAPING_CA_BUNDLE to a path or to PEM content in env. See docs.brightdata.com/general/account/ssl-certificate
+SCRAPING_CA_BUNDLE_ENV = "SCRAPING_CA_BUNDLE"
+_proxy_verify_logged = False
+_ca_bundle_temp_path = None
+
+
+def _proxy_verify():
+    """Verify for proxy requests: SCRAPING_CA_BUNDLE (path or PEM string), or True (system trust)."""
+    global _ca_bundle_temp_path, _proxy_verify_logged
+    raw = os.environ.get(SCRAPING_CA_BUNDLE_ENV)
+    if not raw:
+        # No env: use default (True). Install Bright Data CA on the server and it will work.
+        return True
+    raw = raw.strip()
+    # Path to existing file
+    if os.path.isfile(raw):
+        return raw
+    # Base64-encoded PEM (single-line; works well on App Platform / Railway / Render)
+    if raw and not raw.startswith("-----") and len(raw) > 100:
+        try:
+            raw = base64.b64decode(raw).decode()
+        except Exception:
+            pass
+    # PEM content in env (e.g. pasted in deployment secrets) – no cert file in repo
+    if "-----BEGIN" in raw and "-----END" in raw:
+        if _ca_bundle_temp_path and os.path.isfile(_ca_bundle_temp_path):
+            return _ca_bundle_temp_path
+        try:
+            import tempfile
+            fd, path = tempfile.mkstemp(suffix=".crt", prefix="scraping_ca_")
+            os.write(fd, raw.encode())
+            os.close(fd)
+            _ca_bundle_temp_path = path
+            return path
+        except Exception as e:
+            logger.warning("Failed to write CA bundle from env: %s", e)
+            if os.environ.get("SCRAPING_PROXY") and not _proxy_verify_logged:
+                _proxy_verify_logged = True
+                logger.info("Using verify=False for proxy. Install Bright Data CA on server or set SCRAPING_CA_BUNDLE.")
+            return False
+    # Looks like a path but file missing
+    if not _proxy_verify_logged:
+        _proxy_verify_logged = True
+        logger.warning("SCRAPING_CA_BUNDLE file not found: %s. Using default system trust.", raw)
+    return True
+
+
 def _proxy_kwargs():
-    """Return proxies dict for requests if SCRAPING_PROXY is set (e.g. Bright Data)."""
+    """Return proxies and verify for requests when SCRAPING_PROXY is set."""
     proxy = os.environ.get("SCRAPING_PROXY")
     if not proxy:
         return {}
-    return {"proxies": {"http": proxy, "https": proxy}}
+    kwargs = {"proxies": {"http": proxy, "https": proxy}}
+    verify = _proxy_verify()
+    if verify is not True:
+        kwargs["verify"] = verify
+    return kwargs
 
 
 def _fetch_with_proxy(url: str, headers: dict) -> str | None:
-    """Fetch via SCRAPING_PROXY (Bright Data, ScraperAPI, etc.)."""
+    """Fetch via SCRAPING_PROXY (Bright Data, ScraperAPI, etc.). Uses SCRAPING_CA_BUNDLE if set."""
     proxy = os.environ.get("SCRAPING_PROXY")
     if not proxy:
         return None
+    verify = _proxy_verify()
     try:
         resp = requests.get(
             url,
             headers=headers,
             proxies={"http": proxy, "https": proxy},
             timeout=30,
+            verify=verify,
         )
         resp.raise_for_status()
         resp.encoding = resp.apparent_encoding or "utf-8"
@@ -63,16 +118,18 @@ def _fetch_with_proxy(url: str, headers: dict) -> str | None:
 
 
 def _fetch_with_curl_cffi(url: str, headers: dict) -> str | None:
-    """Fetch with curl_cffi (Chrome TLS fingerprint). Optional proxy via SCRAPING_PROXY."""
+    """Fetch with curl_cffi. Optional proxy and SCRAPING_CA_BUNDLE for Bright Data TLS."""
     try:
         from curl_cffi import requests as curl_requests
         proxy = os.environ.get("SCRAPING_PROXY")
+        verify = _proxy_verify()
         resp = curl_requests.get(
             url,
             headers=headers,
             timeout=20,
             impersonate="chrome120",
             proxy=proxy or None,
+            verify=verify,
         )
         resp.raise_for_status()
         return resp.text
