@@ -76,6 +76,13 @@ When the Angular app is deployed on one host (e.g. Vercel) and the Python API on
 3. **Sessions / cookies**  
    The app uses cookie-based sessions (`withCredentials: true`). If the frontend and API are on different domains, set **`SESSION_COOKIE_SECURE=1`** in the backend environment so cookies use `SameSite=None; Secure` (HTTPS only). For local or mobile testing over **HTTP**, leave `SESSION_COOKIE_SECURE` unset so the session cookie can be stored; otherwise you’ll see “Authentication required” after login on mobile.
 
+4. **Recipe scraping proxy (402/403 on deployed servers)**  
+   Recipe sites often block cloud IPs. Set **`SCRAPING_PROXY`** to an HTTP proxy URL so scraping works when deployed. Example with [Bright Data](https://brightdata.com/): create a residential or datacenter proxy zone, then set:
+   ```
+   SCRAPING_PROXY=http://USERNAME:PASSWORD@zproxy.lum-superproxy.io:22225
+   ```
+   Use the host and port from your Bright Data zone (e.g. `brd.superproxy.io:22225`). Other providers (ScraperAPI, ZenRows) work the same: set `SCRAPING_PROXY` to their proxy URL. Leave unset for local development.
+
 ### Mobile / same-network testing
 
 To use the app on your phone while the dev servers run on your computer:

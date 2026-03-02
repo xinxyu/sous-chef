@@ -1,5 +1,6 @@
 """Scrape blueprint: POST /scrape to extract recipe from URL."""
 import logging
+import os
 from urllib.parse import urlparse
 
 import requests
@@ -33,11 +34,46 @@ def _get_cloudscraper():
     return _cloudscraper if _cloudscraper else None
 
 
+def _proxy_kwargs():
+    """Return proxies dict for requests if SCRAPING_PROXY is set (e.g. Bright Data)."""
+    proxy = os.environ.get("SCRAPING_PROXY")
+    if not proxy:
+        return {}
+    return {"proxies": {"http": proxy, "https": proxy}}
+
+
+def _fetch_with_proxy(url: str, headers: dict) -> str | None:
+    """Fetch via SCRAPING_PROXY (Bright Data, ScraperAPI, etc.)."""
+    proxy = os.environ.get("SCRAPING_PROXY")
+    if not proxy:
+        return None
+    try:
+        resp = requests.get(
+            url,
+            headers=headers,
+            proxies={"http": proxy, "https": proxy},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or "utf-8"
+        return resp.text
+    except Exception as e:
+        logger.warning("Proxy fetch failed: %s", e)
+        return None
+
+
 def _fetch_with_curl_cffi(url: str, headers: dict) -> str | None:
-    """Fetch with curl_cffi (Chrome TLS fingerprint). Returns HTML or None on failure."""
+    """Fetch with curl_cffi (Chrome TLS fingerprint). Optional proxy via SCRAPING_PROXY."""
     try:
         from curl_cffi import requests as curl_requests
-        resp = curl_requests.get(url, headers=headers, timeout=20, impersonate="chrome120")
+        proxy = os.environ.get("SCRAPING_PROXY")
+        resp = curl_requests.get(
+            url,
+            headers=headers,
+            timeout=20,
+            impersonate="chrome120",
+            proxy=proxy or None,
+        )
         resp.raise_for_status()
         return resp.text
     except ImportError:
@@ -46,31 +82,55 @@ def _fetch_with_curl_cffi(url: str, headers: dict) -> str | None:
         return None
 
 
+def _user_friendly_fetch_error(status_code: int, url: str) -> str:
+    """User-facing message for 402/403 from recipe sites."""
+    if status_code == 402:
+        return (
+            "This recipe site is blocking requests from this server (402 Payment Required). "
+            "Set SCRAPING_PROXY to a proxy URL (e.g. Bright Data) for deployed servers."
+        )
+    if status_code == 403:
+        return (
+            "This recipe site blocked the request (403 Forbidden). "
+            "Set SCRAPING_PROXY to a proxy URL (e.g. Bright Data) for deployed servers."
+        )
+    return f"Failed to fetch URL: {status_code} Client Error for url: {url}"
+
+
 def _fetch_html(url: str) -> str:
-    """Fetch HTML. Prefers curl_cffi (best Cloudflare bypass), then cloudscraper, then requests."""
+    """Fetch HTML. If SCRAPING_PROXY is set, use proxy first; then curl_cffi, cloudscraper, requests."""
     headers = dict(_DEFAULT_HEADERS)
     parsed = urlparse(url)
     if parsed.netloc:
         headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
 
-    # 1. curl_cffi (Chrome TLS fingerprint - most reliable for Cloudflare)
+    # 0. Proxy (Bright Data, ScraperAPI, etc.) when set – avoids datacenter IP blocks
+    if os.environ.get("SCRAPING_PROXY"):
+        html = _fetch_with_proxy(url, headers)
+        if html:
+            return html
+
+    # 1. curl_cffi (Chrome TLS fingerprint)
     html = _fetch_with_curl_cffi(url, headers)
     if html:
         return html
 
-    # 2. cloudscraper (Cloudflare JS challenge solver)
+    # 2. cloudscraper
     scraper = _get_cloudscraper()
     if scraper:
         try:
-            resp = scraper.get(url, timeout=20)
+            kwargs = _proxy_kwargs()
+            resp = scraper.get(url, timeout=20, **kwargs)
             resp.raise_for_status()
             resp.encoding = resp.apparent_encoding or "utf-8"
             return resp.text
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.HTTPError as e:
+            if e.response and e.response.status_code in (402, 403):
+                raise
             pass
 
-    # 3. plain requests
-    resp = requests.get(url, headers=headers, timeout=15)
+    # 3. plain requests (with optional proxy)
+    resp = requests.get(url, headers=headers, timeout=15, **_proxy_kwargs())
     resp.raise_for_status()
     resp.encoding = resp.apparent_encoding or "utf-8"
     return resp.text
@@ -86,6 +146,11 @@ def scrape_recipe():
 
     try:
         html = _fetch_html(url)
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response else 500
+        msg = _user_friendly_fetch_error(status, url) if status in (402, 403) else str(e)
+        logger.error("Failed to fetch URL: %s", e)
+        return jsonify({"error": msg}), 500
     except Exception as e:
         logger.error("Failed to fetch URL: %s", e)
         return jsonify({"error": f"Failed to fetch URL: {str(e)}"}), 500
