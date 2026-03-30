@@ -1,5 +1,6 @@
-import { Component, input, output, signal, computed } from '@angular/core';
+import { Component, input, output, signal, computed, inject } from '@angular/core';
 import { Recipe } from '../recipe.service';
+import { AuthService } from '../auth.service';
 
 @Component({
   selector: 'app-menu-list-tab',
@@ -9,12 +10,16 @@ import { Recipe } from '../recipe.service';
   styleUrls: ['./menu-list-tab.component.scss'],
 })
 export class MenuListTabComponent {
+  readonly authService = inject(AuthService);
+
   menuRecipes = input<Recipe[]>([]);
 
   changeSelection = output<void>();
 
   readonly shoppingListView = signal<'combined' | 'byRecipe'>('byRecipe');
   readonly copyFeedback = signal(false);
+  readonly keepFeedback = signal(false);
+  readonly keepError = signal<string | null>(null);
 
   readonly combinedIngredients = computed(() =>
     this.buildCombinedIngredientsFromRecipes(this.menuRecipes())
@@ -81,6 +86,45 @@ export class MenuListTabComponent {
       lines.push('');
     }
     return lines.join('\n').trim();
+  }
+
+  /** Menu titles plus shopping list (by recipe), for export to Keep or other apps. */
+  getMenuAndListAsText(): string {
+    const lines: string[] = ['Menu', ''];
+    for (const r of this.menuRecipes()) {
+      lines.push('• ' + (r.title || 'Untitled Recipe'));
+    }
+    lines.push('');
+    lines.push(this.getShoppingListAsText());
+    return lines.join('\n').trim();
+  }
+
+  /** Copy menu + shopping list and open Keep (consumer apps cannot use the Keep OAuth scope). */
+  async openMenuInGoogleKeep(): Promise<void> {
+    this.keepError.set(null);
+    if (!this.authService.getCurrentUser()?.google_account) return;
+    const text = this.getMenuAndListAsText();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        document.body.removeChild(textarea);
+        this.keepError.set('Could not copy. Allow clipboard access or use "Copy for notes".');
+        return;
+      }
+      document.body.removeChild(textarea);
+    }
+    window.open('https://keep.google.com/', '_blank', 'noopener,noreferrer');
+    this.keepFeedback.set(true);
+    setTimeout(() => this.keepFeedback.set(false), 3500);
   }
 
   async copyShoppingList(): Promise<void> {

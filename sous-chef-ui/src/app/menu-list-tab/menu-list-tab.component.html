@@ -35,6 +35,19 @@
               <i class="fa-solid fa-clipboard icon-left"></i>Copy for notes
             }
           </button>
+          @if (authService.currentUser()?.google_account) {
+            <button
+              class="btn btn-keep"
+              type="button"
+              (click)="openMenuInGoogleKeep()"
+              title="Copies your menu and shopping list, opens Google Keep — paste into a new note (⌘V / Ctrl+V)">
+              @if (keepFeedback()) {
+                <i class="fa-solid fa-check icon-left"></i>Copied — paste in Keep
+              } @else {
+                <i class="fa-brands fa-google icon-left"></i>Open Google Keep
+              }
+            </button>
+          }
           <div class="shopping-list-view-toggle">
             <button
               class="toggle-btn"
@@ -55,7 +68,13 @@
         <p class="shopping-list-intro">Ingredients merged by item across all recipes:</p>
       }
       @if (shoppingListView() === 'byRecipe') {
-        <p class="shopping-list-intro">Ingredients listed under each recipe. Use "Copy for notes" to paste into your note app.</p>
+        <p class="shopping-list-intro">
+          Ingredients listed under each recipe. Use "Copy for notes" or "Open in Google Keep" (Google accounts) to save the list.
+        </p>
+      }
+
+      @if (keepError()) {
+        <p class="keep-error">{{ keepError() }}</p>
       }
 
       @if (shoppingListView() === 'combined') {

@@ -9,6 +9,8 @@ export interface User {
   id: string;
   username: string;
   email?: string;
+  /** Present when /auth/me returns it — true if the user signed in with or linked Google. */
+  google_account?: boolean;
 }
 
 @Injectable({

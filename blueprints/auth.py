@@ -243,7 +243,12 @@ def login():
         logger.info("User logged in: %s", username)
         return jsonify({
             "message": "Login successful",
-            "user": {"id": str(user.id), "username": user.username, "email": user.email},
+            "user": {
+                "id": str(user.id),
+                "username": user.username,
+                "email": user.email,
+                "google_account": bool(user.google_sub),
+            },
             "token": token,
         }), 200
     except Exception as e:
@@ -346,6 +351,11 @@ def get_current_user():
         return jsonify({"user": None}), 200
     if user:
         return jsonify({
-            "user": {"id": str(user.id), "username": user.username, "email": user.email}
+            "user": {
+                "id": str(user.id),
+                "username": user.username,
+                "email": user.email,
+                "google_account": bool(user.google_sub),
+            }
         }), 200
     return jsonify({"user": None}), 200

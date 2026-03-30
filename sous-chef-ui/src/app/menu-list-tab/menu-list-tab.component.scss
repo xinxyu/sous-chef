@@ -64,6 +64,28 @@
   }
 }
 
+.btn-keep {
+  padding: 8px 14px;
+  font-size: 14px;
+  white-space: nowrap;
+  background: #f3b400;
+  color: #1a1a1a;
+  border: 1px solid #e2a800;
+  &:hover:not(:disabled) {
+    background: #ffc107;
+  }
+  &:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+  }
+}
+
+.keep-error {
+  color: #c62828;
+  font-size: 0.9em;
+  margin: 8px 0 0;
+}
+
 .shopping-list-view-toggle {
   display: flex;
   gap: 0;
