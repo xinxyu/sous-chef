@@ -200,6 +200,35 @@
   }
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #888;
+  font-size: 13px;
+  margin: 4px 0;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e0e0e0;
+}
+
+.modal .btn-google {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  box-shadow: none;
+}
+.modal .btn-google:hover {
+  background: #f8f9fa;
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;

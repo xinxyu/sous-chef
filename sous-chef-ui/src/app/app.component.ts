@@ -70,6 +70,12 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     if (typeof window === 'undefined') return;
+    const oauthErr = sessionStorage.getItem('oauth_error');
+    if (oauthErr) {
+      sessionStorage.removeItem('oauth_error');
+      this.authError.set(oauthErr);
+      this.showLogin.set(true);
+    }
     const pathname = window.location.pathname || '';
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -315,6 +321,11 @@ export class AppComponent implements OnInit {
     this.authSuccess.set(null);
     this.showForgotPassword.set(false);
     this.showLogin.set(true);
+  }
+
+  startGoogleLogin(): void {
+    if (typeof window === 'undefined') return;
+    window.location.href = `${this.authService.getApiUrl()}/auth/google`;
   }
 
   onLogout(): void {

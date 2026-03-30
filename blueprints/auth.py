@@ -1,14 +1,17 @@
-"""Auth blueprint: register, login, logout, verify-email, forgot/reset password, me."""
-import os
-import secrets
-import uuid
+"""Auth blueprint: register, login, logout, verify-email, forgot/reset password, Google OAuth, me."""
 import logging
+import os
+import re
+import secrets
+import urllib.parse
+import uuid
 from datetime import datetime, timedelta
 
-from flask import Blueprint, request, jsonify, session
+import requests
+from flask import Blueprint, redirect, request, jsonify, session, url_for
 from sqlalchemy import select, and_
 
-from extensions import db
+from extensions import db, oauth
 from models import User, EmailVerificationToken, PasswordResetToken
 from utils.auth import hash_password, encode_jwt, get_current_user_id
 from utils.email import send_email
@@ -22,7 +25,139 @@ def _timedelta_hours(hours):
 
 
 def _base_url():
-    return (os.environ.get("APP_BASE_URL") or os.environ.get("FRONTEND_ORIGIN") or "http://localhost:4200").rstrip("/")
+    raw = (os.environ.get("APP_BASE_URL") or os.environ.get("FRONTEND_ORIGIN") or "http://localhost:4200").strip()
+    if not raw:
+        raw = "http://localhost:4200"
+    raw = raw.rstrip("/")
+    if not raw.startswith(("http://", "https://")):
+        raw = f"http://{raw}"
+    return raw
+
+
+def _google_oauth_configured() -> bool:
+    return bool(os.environ.get("GOOGLE_CLIENT_ID") and os.environ.get("GOOGLE_CLIENT_SECRET"))
+
+
+def _google_redirect_uri():
+    return (os.environ.get("GOOGLE_REDIRECT_URI") or "").strip() or None
+
+
+def _sanitize_username_base(s: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9_]", "_", (s or "").strip()).strip("_")
+    return (s[:40] if s else "user") or "user"
+
+
+def _ensure_unique_username(base: str) -> str:
+    base = _sanitize_username_base(base)
+    if len(base) < 3:
+        base = f"{base}_sc"
+    candidate = base
+    n = 0
+    while True:
+        existing = db.session.execute(select(User).where(User.username == candidate)).scalar_one_or_none()
+        if not existing:
+            return candidate
+        n += 1
+        candidate = f"{base}_{n}"
+
+
+def _fetch_google_userinfo(access_token: str) -> dict | None:
+    try:
+        r = requests.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.warning("Google userinfo request failed: %s", e)
+        return None
+
+
+@bp.route("/google", methods=["GET"])
+def google_login():
+    if not _google_oauth_configured():
+        return jsonify({"error": "Google sign-in is not configured"}), 503
+    redirect_uri = _google_redirect_uri() or url_for("auth.google_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@bp.route("/google/callback", methods=["GET"])
+def google_callback():
+    frontend = _base_url()
+    if not _google_oauth_configured():
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('Google sign-in is not configured')}")
+
+    try:
+        token = oauth.google.authorize_access_token()
+    except Exception as e:
+        logger.warning("Google OAuth callback failed: %s", e)
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('Google sign-in was cancelled or failed')}")
+
+    access_token = (token or {}).get("access_token")
+    if not access_token:
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('No access token from Google')}")
+
+    userinfo = _fetch_google_userinfo(access_token)
+    if not userinfo:
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('Could not load Google profile')}")
+
+    google_sub = (userinfo.get("sub") or "").strip()
+    email = (userinfo.get("email") or "").strip()
+    if not google_sub:
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('Invalid Google account')}")
+    if not email:
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('Google did not provide an email')}")
+
+    email_lower = email.lower()
+    user = db.session.execute(select(User).where(User.google_sub == google_sub)).scalar_one_or_none()
+    if not user:
+        user = db.session.execute(
+            select(User).where(
+                and_(
+                    User.email.isnot(None),
+                    db.func.lower(db.func.trim(User.email)) == email_lower,
+                )
+            )
+        ).scalar_one_or_none()
+        if user:
+            if user.google_sub and user.google_sub != google_sub:
+                return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('This email is linked to another Google account')}")
+            user.google_sub = google_sub
+
+    if not user:
+        local = email.split("@")[0] if "@" in email else "user"
+        username = _ensure_unique_username(local)
+        user_id = uuid.uuid4()
+        created_at = datetime.now()
+        user = User(
+            id=user_id,
+            username=username,
+            email=email,
+            password_hash=hash_password(secrets.token_urlsafe(48)),
+            created_at=created_at,
+            email_verified=True,
+            google_sub=google_sub,
+        )
+        db.session.add(user)
+    else:
+        if not user.email_verified:
+            user.email_verified = True
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error("Google OAuth user persist failed: %s", e)
+        return redirect(f"{frontend}/#oauth_error={urllib.parse.quote('Could not save account')}")
+
+    session["user_id"] = str(user.id)
+    session["username"] = user.username
+    jwt_token = encode_jwt(str(user.id))
+    frag = urllib.parse.quote(jwt_token, safe="")
+    logger.info("Google OAuth login: user_id=%s", user.id)
+    return redirect(f"{frontend}/#oauth_token={frag}")
 
 
 @bp.route("/register", methods=["POST"])

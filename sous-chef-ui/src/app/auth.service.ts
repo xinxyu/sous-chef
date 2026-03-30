@@ -26,6 +26,7 @@ export class AuthService {
   readonly currentUser$ = this.currentUserSubject.asObservable();
 
   constructor(private http: HttpClient) {
+    this.applyOAuthHashIfPresent();
     this.checkAuthStatus();
   }
 
@@ -37,6 +38,32 @@ export class AuthService {
   private clearToken(): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  }
+
+  /** After Google OAuth redirect: token or error is in location hash; sync to storage and strip hash. */
+  private applyOAuthHashIfPresent(): void {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash || '';
+    if (hash.startsWith('#oauth_token=')) {
+      const raw = hash.slice('#oauth_token='.length);
+      try {
+        const token = decodeURIComponent(raw);
+        localStorage.setItem(AUTH_TOKEN_KEY, token);
+      } catch {
+        sessionStorage.setItem('oauth_error', 'Could not read sign-in token');
+      }
+      window.history.replaceState({}, '', window.location.pathname + window.location.search);
+      return;
+    }
+    if (hash.startsWith('#oauth_error=')) {
+      const raw = hash.slice('#oauth_error='.length);
+      try {
+        sessionStorage.setItem('oauth_error', decodeURIComponent(raw));
+      } catch {
+        sessionStorage.setItem('oauth_error', 'Google sign-in failed');
+      }
+      window.history.replaceState({}, '', window.location.pathname + window.location.search);
     }
   }
 
@@ -106,5 +133,10 @@ export class AuthService {
 
   getCurrentUser(): User | null {
     return this.currentUserSignal();
+  }
+
+  /** Backend URL for browser redirect (e.g. Google OAuth). */
+  getApiUrl(): string {
+    return this.apiUrl;
   }
 }

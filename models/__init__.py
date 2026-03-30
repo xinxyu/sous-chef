@@ -17,6 +17,7 @@ class User(db.Model):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
 
     saved_recipes = relationship("SavedRecipe", back_populates="user", cascade="all, delete-orphan")
     email_verification_tokens = relationship("EmailVerificationToken", back_populates="user", cascade="all, delete-orphan")
@@ -30,6 +31,7 @@ class User(db.Model):
             "password_hash": self.password_hash,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "email_verified": self.email_verified,
+            "google_sub": self.google_sub,
         }
 
 

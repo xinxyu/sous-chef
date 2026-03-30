@@ -40,6 +40,10 @@
       <div class="modal" (click)="$event.stopPropagation()">
         <h2>Login</h2>
         <form (ngSubmit)="onLogin()">
+          <button type="button" class="btn btn-google" (click)="startGoogleLogin()">
+            <i class="fa-brands fa-google icon-left"></i>Continue with Google
+          </button>
+          <div class="auth-divider"><span>or</span></div>
           <input type="text" [(ngModel)]="loginUsername" name="loginUsername" placeholder="Username" required />
           <input type="password" [(ngModel)]="loginPassword" name="loginPassword" placeholder="Password" required />
           <a class="forgot-link" (click)="openForgotPassword()">Forgot password?</a>
@@ -70,6 +74,10 @@
           </div>
         } @else {
           <h2>Register</h2>
+          <button type="button" class="btn btn-google" (click)="startGoogleLogin()">
+            <i class="fa-brands fa-google icon-left"></i>Continue with Google
+          </button>
+          <div class="auth-divider"><span>or</span></div>
           <form (ngSubmit)="onRegister()">
             <input type="text" [(ngModel)]="registerUsername" name="registerUsername" placeholder="Username" required />
             <input type="email" [(ngModel)]="registerEmail" name="registerEmail" placeholder="Email (required)" required />
